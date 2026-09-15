@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "capplan_server": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7071",
+      "launchBrowser": false
+    }
+  }
+}

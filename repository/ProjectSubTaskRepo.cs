@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace sma.plan
 {
-	internal class TimeEntryRepo : DatabaseRepo<TimeEntry>, ITimeEntryRepo
+	internal class ProjectSubTaskRepo : DatabaseRepo<ProjectSubTask>, IProjectSubTaskRepo
 	{
 
 	}

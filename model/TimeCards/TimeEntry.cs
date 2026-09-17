@@ -31,6 +31,8 @@ namespace sma.plan
 
 		public decimal Hours { get; set; }
 
+		public string Notes { get; set; }
+
 		public bool Billable { get; set; }
 
 		public DateTime? LastModified { get; set; }
@@ -51,6 +53,7 @@ namespace sma.plan
 				TeamMemberId = this.TeamMemberId,
 				Date = this.Date,
 				Hours = this.Hours,
+				Notes = this.Notes,
 				Billable = this.Billable,
 				LastModified = this.LastModified,
 				ModifiedBy = this.ModifiedBy,

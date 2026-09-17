@@ -19,5 +19,7 @@ namespace sma.plan
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string ProjectTaskId { get; set; }
 
+		public string Name { get; set; }
+
 	}
 }

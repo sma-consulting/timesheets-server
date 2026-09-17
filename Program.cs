@@ -27,6 +27,9 @@ var host = new HostBuilder()
 		services.AddSingleton<IUserRepo, UserRepo>();
 		services.AddSingleton<ICurveDistributionRepo, CurveDistributionRepo>();
 		services.AddSingleton<IRangeDistributionRepo, RangeDistributionRepo>();
+		services.AddSingleton<ITimeEntryRepo, TimeEntryRepo>();
+		services.AddSingleton<IProjectTaskRepo, ProjectTaskRepo>();
+		services.AddSingleton<IProjectSubTaskRepo, ProjectSubTaskRepo>();
 
 		//service definitions
 		services.AddTransient<ISecurityService, SecurityService>();
@@ -35,6 +38,9 @@ var host = new HostBuilder()
 		services.AddScoped<ITeamMemberService, TeamMemberService>();
 		services.AddScoped<IProjectService, ProjectService>();
 		services.AddScoped<ITimeCardService, TimeCardService>();
+		services.AddScoped<ITimeEntryService, TimeEntryService>();
+		services.AddScoped<IProjectTaskService, ProjectTaskService>();
+		services.AddScoped<IProjectSubTaskService, ProjectSubTaskService>();
 
 		var options = new QueueClientOptions
 		{

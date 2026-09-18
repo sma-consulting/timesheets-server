@@ -12,6 +12,7 @@ namespace sma.plan
 
 		string WhoAmI();
 		public bool AuthorizeUser();
+		string GetCurrentEmail();
 
 	}
 }

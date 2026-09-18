@@ -16,28 +16,73 @@ using System.Threading.Tasks;
 
 namespace sma.plan
 {
+    internal class LoginRequest
+    {
+        public string Email { get; set; }
+    }
+
     internal class UserFunctions : RequestHandler
     {
 
         private ISecurityService _securityService;
+        private IUserService _userService;
         private ILogger<UserFunctions> _logger;
 
 
-		public UserFunctions(ISecurityService securityService, ILogger<UserFunctions> logger) 
+		public UserFunctions(ISecurityService securityService, IUserService userService, ILogger<UserFunctions> logger) 
         { 
             _securityService = securityService;
+            _userService = userService;
             _logger = logger;
         }
+
+		private static IActionResult NotSignedIn()
+		{
+			return new OkObjectResult(new
+			{
+				status = new { code = 401, error = "Not signed in." },
+				result = new { },
+			});
+		}
 
 		[FunctionName("WhoAmI")]
 		public async Task<IActionResult> RunWhoAmI(
 		[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "whoami")] HttpRequest req)
 		{
+			var email = _securityService.GetCurrentEmail();
 
-            var userName = _securityService.WhoAmI();
+			if (string.IsNullOrWhiteSpace(email))
+			{
+				return NotSignedIn();
+			}
 
-			var userObj = new { userName };
-			return new OkObjectResult(userObj);
+			return Ok(
+				() => _userService.ResolveOrCreate(email),
+				(t) => new
+				{
+					teamMember = t
+				});
+		}
+
+
+		[FunctionName("Login")]
+		public async Task<IActionResult> RunLogin(
+		[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "login")] HttpRequest req)
+		{
+			LoginRequest login = JsonConvert.DeserializeObject<LoginRequest>(
+				await new StreamReader(req.Body).ReadToEndAsync());
+
+			if (string.IsNullOrWhiteSpace(login?.Email))
+			{
+				return NotSignedIn();
+			}
+
+			return Ok(
+				() => _userService.ResolveOrCreate(login.Email),
+				(t) => new
+				{
+					teamMember = t
+				});
 		}
 
 		[FunctionName("CreateUser")]

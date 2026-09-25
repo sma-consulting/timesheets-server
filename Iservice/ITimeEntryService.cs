@@ -18,5 +18,10 @@ namespace sma.plan
 		TimeEntry Delete(string id);
 
 		List<TimeEntry> GetAllTimeEntries();
+		bool MayLogAgainst(string teamMemberId, string projectSubTaskId);
+		bool MayWrite(string timeEntryId);
+		bool MayRead(string timeEntryId);
+		string Validate(TimeEntry timeEntry);
+		string OwnerFor(TimeEntry timeEntry);
 	}
 }

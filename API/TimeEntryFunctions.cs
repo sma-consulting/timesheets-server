@@ -29,6 +29,18 @@ namespace sma.plan
 			TimeEntry timeEntry = JsonConvert.DeserializeObject<TimeEntry>(
 				await new StreamReader(req.Body).ReadToEndAsync());
 
+			string invalid = _timeEntryService.Validate(timeEntry);
+			if (invalid != null)
+			{
+				return Invalid(invalid);
+			}
+
+			if (!_timeEntryService.MayLogAgainst(
+					_timeEntryService.OwnerFor(timeEntry), timeEntry.ProjectSubTaskId))
+			{
+				return NotAssigned();
+			}
+
 			return Ok(
 				() => _timeEntryService.Create(timeEntry),
 				(t) => new
@@ -42,6 +54,11 @@ namespace sma.plan
 		public async Task<IActionResult> RunDeleteTimeEntry(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "timeEntry/{id}/delete/")] HttpRequest req, string id)
 		{
+			if (!_timeEntryService.MayWrite(id))
+			{
+				return NotYours();
+			}
+
 			return Ok(
 				() => _timeEntryService.Delete(id),
 				(t) => new
@@ -55,6 +72,11 @@ namespace sma.plan
 		public async Task<IActionResult> RunGetTimeEntry(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "timeEntry/{id}/")] HttpRequest req, string id)
 		{
+			if (!_timeEntryService.MayRead(id))
+			{
+				return NotYours();
+			}
+
 			return Ok(
 				() => _timeEntryService.Get(id),
 				(t) => new
@@ -71,6 +93,25 @@ namespace sma.plan
 			TimeEntry timeEntry = JsonConvert.DeserializeObject<TimeEntry>(
 				await new StreamReader(req.Body).ReadToEndAsync());
 			timeEntry.Id = id;
+
+			// Checked before MayLogAgainst: reassigning someone else's entry to
+			// yourself would otherwise pass, since OwnerFor rewrites the owner.
+			if (!_timeEntryService.MayWrite(id))
+			{
+				return NotYours();
+			}
+
+			string invalid = _timeEntryService.Validate(timeEntry);
+			if (invalid != null)
+			{
+				return Invalid(invalid);
+			}
+
+			if (!_timeEntryService.MayLogAgainst(
+					_timeEntryService.OwnerFor(timeEntry), timeEntry.ProjectSubTaskId))
+			{
+				return NotAssigned();
+			}
 
 			return Ok(
 				() => _timeEntryService.Update(timeEntry),

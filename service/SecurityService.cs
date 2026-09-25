@@ -32,21 +32,78 @@ namespace sma.plan {
 
 		private ClaimsPrincipal _principal;
 		private HttpContext _httpContext;
+		private IUserRepo _userRepo;
+		private ITeamMemberRepo _teamMemberRepo;
 
-		public SecurityService(IHttpContextAccessor httpContext)
+		public SecurityService(IHttpContextAccessor httpContext, IUserRepo userRepo, ITeamMemberRepo teamMemberRepo)
 		{
 			_principal = httpContext.HttpContext.User;
 			_httpContext = httpContext.HttpContext;
+			_userRepo = userRepo;
+			_teamMemberRepo = teamMemberRepo;
+		}
+
+		// The TeamMember representing the caller - what time entries are owned by.
+		// Null when nobody can be identified, or when the User has no TeamMember.
+		public string GetCurrentTeamMemberId()
+		{
+			var email = GetCurrentEmail();
+
+			if (string.IsNullOrWhiteSpace(email))
+			{
+				return null;
+			}
+
+			User user = _userRepo.GetByEmail(email.Trim());
+
+			if (user == null)
+			{
+				return null;
+			}
+
+			return _teamMemberRepo.GetByUserId(user.Id)?.Id;
+		}
+
+		// Admin is a flag on the User record, resolved from whoever the current
+		// request belongs to. Returns false when nobody can be identified.
+		public bool IsCurrentUserAdmin()
+		{
+			var email = GetCurrentEmail();
+
+			if (string.IsNullOrWhiteSpace(email))
+			{
+				return false;
+			}
+
+			User user = _userRepo.GetByEmail(email.Trim());
+
+			// Compared case-insensitively on purpose: privileges are typed into
+			// Mongo by hand, and "Admin" silently failing to grant admin is a very
+			// expensive typo to debug.
+			return user != null && user.Privileges != null &&
+				user.Privileges.Any(p =>
+					string.Equals(p?.Trim(), User.AdminPrivilege, StringComparison.OrdinalIgnoreCase));
 		}
 
 		// Easy Auth never runs on localhost, so there is no header to decode while
 		// developing - LOCAL_TEST_EMAIL stands in for a real login so that requests
-		// resolve to an actual user record instead of "ANONYMOUS".
+		// resolve to an actual user record instead of "ANONYMOUS". An x-test-email
+		// header overrides it, so the login screen can switch user without a
+		// restart.
+		//
+		// This branch is reachable only when LOCAL_TEST_EMAIL is set (or a debugger
+		// is attached). That setting lives solely in local.settings.json, which is
+		// never deployed, so in production the header is never read at all.
+		// NEVER set LOCAL_TEST_EMAIL in Azure - it would let anyone impersonate
+		// anyone by sending a header.
 		public string GetCurrentEmail()
 		{
-			if (System.Diagnostics.Debugger.IsAttached)
+			var localTestEmail = Environment.GetEnvironmentVariable("LOCAL_TEST_EMAIL");
+
+			if (System.Diagnostics.Debugger.IsAttached || !string.IsNullOrEmpty(localTestEmail))
 			{
-				return Environment.GetEnvironmentVariable("LOCAL_TEST_EMAIL");
+				var fromHeader = _httpContext?.Request.Headers["x-test-email"].FirstOrDefault();
+				return string.IsNullOrWhiteSpace(fromHeader) ? localTestEmail : fromHeader;
 			}
 
 			if (_httpContext == null ||

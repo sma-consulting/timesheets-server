@@ -16,5 +16,13 @@ namespace sma.plan
 		Project Get(string id);
 
 		List<Project> GetAllProjects();
+
+		bool MayView(string projectId);
+
+		// Null means every project is visible.
+		HashSet<string> VisibleProjectIds();
+
+		// Projects the caller is Project Manager of.
+		HashSet<string> ManagedProjectIds();
 	}
 }

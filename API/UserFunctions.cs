@@ -60,7 +60,8 @@ namespace sma.plan
 				() => _userService.ResolveOrCreate(email),
 				(t) => new
 				{
-					teamMember = t
+					teamMember = t,
+					isAdmin = _userService.IsAdmin(email)
 				});
 		}
 
@@ -81,7 +82,8 @@ namespace sma.plan
 				() => _userService.ResolveOrCreate(login.Email),
 				(t) => new
 				{
-					teamMember = t
+					teamMember = t,
+					isAdmin = _userService.IsAdmin(login.Email)
 				});
 		}
 
@@ -89,6 +91,13 @@ namespace sma.plan
         public async Task<IActionResult> RunCreateUser(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "user/create/")] HttpRequest req)
         {
+            // User carries IsAdmin, so this is the privilege table - anyone able to
+            // write it could make themselves an administrator.
+            if (!_securityService.IsCurrentUserAdmin())
+            {
+                return Forbidden();
+            }
+
             User user = JsonConvert.DeserializeObject<User>(
                 await new StreamReader(req.Body).ReadToEndAsync());
 
@@ -105,6 +114,11 @@ namespace sma.plan
         public async Task<IActionResult> RunDeleteUser(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "user/{id}/delete/")] HttpRequest req, string id)
         {
+            if (!_securityService.IsCurrentUserAdmin())
+            {
+                return Forbidden();
+            }
+
             return Ok(
                 () => (new DatabaseRepo<User>()).Delete(id),
                 (p) => new
@@ -131,6 +145,11 @@ namespace sma.plan
         public async Task<IActionResult> RunUpdateUser(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "user/{id}/update/")] HttpRequest req, string id)
         {
+            if (!_securityService.IsCurrentUserAdmin())
+            {
+                return Forbidden();
+            }
+
             User user = JsonConvert.DeserializeObject<User>(
                 await new StreamReader(req.Body).ReadToEndAsync());
             user.Id = id;

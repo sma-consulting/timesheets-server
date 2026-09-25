@@ -10,11 +10,16 @@ namespace sma.plan
 	{
 		private IProjectTaskRepo _repo;
 		private ISecurityService _securityService;
+		private IProjectService _projectService;
 
-		public ProjectTaskService(IProjectTaskRepo repo, ISecurityService securityService)
+		public ProjectTaskService(
+			IProjectTaskRepo repo,
+			ISecurityService securityService,
+			IProjectService projectService)
 		{
 			_repo = repo;
 			_securityService = securityService;
+			_projectService = projectService;
 		}
 
 		public ProjectTask Create(ProjectTask projectTask)
@@ -41,10 +46,19 @@ namespace sma.plan
 			return _repo.Delete(id);
 		}
 
+		// A task inherits its project's visibility. Filtering here as well as on
+		// the project list stops the work breakdown leaking the names of projects
+		// the caller was never shown.
 		public List<ProjectTask> GetAllProjectTasks()
 		{
 			_securityService.AuthorizeUser();
-			return _repo.GetAll();
+
+			List<ProjectTask> all = _repo.GetAll();
+			HashSet<string> visible = _projectService.VisibleProjectIds();
+
+			return visible == null
+				? all
+				: all.Where(t => visible.Contains(t.ProjectId)).ToList();
 		}
 	}
 }

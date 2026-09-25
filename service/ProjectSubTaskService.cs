@@ -10,11 +10,19 @@ namespace sma.plan
 	{
 		private IProjectSubTaskRepo _repo;
 		private ISecurityService _securityService;
+		private IProjectService _projectService;
+		private IProjectTaskRepo _taskRepo;
 
-		public ProjectSubTaskService(IProjectSubTaskRepo repo, ISecurityService securityService)
+		public ProjectSubTaskService(
+			IProjectSubTaskRepo repo,
+			ISecurityService securityService,
+			IProjectService projectService,
+			IProjectTaskRepo taskRepo)
 		{
 			_repo = repo;
 			_securityService = securityService;
+			_projectService = projectService;
+			_taskRepo = taskRepo;
 		}
 
 		public ProjectSubTask Create(ProjectSubTask projectSubTask)
@@ -41,10 +49,35 @@ namespace sma.plan
 			return _repo.Delete(id);
 		}
 
+		// Visible at project level, same as ProjectTask.
+		//
+		// Reached through the parent task rather than ProjectSubTask.ProjectId.
+		// That field is a denormalised convenience the task panel fills in, and
+		// sub-tasks seeded before the panel existed do not have it - filtering on
+		// it drops them all and empties the time log. ProjectTaskId is the link
+		// the tree is actually built from, so it is the one to trust.
 		public List<ProjectSubTask> GetAllProjectSubTasks()
 		{
 			_securityService.AuthorizeUser();
-			return _repo.GetAll();
+
+			List<ProjectSubTask> all = _repo.GetAll();
+			HashSet<string> visible = _projectService.VisibleProjectIds();
+
+			if (visible == null)
+			{
+				return all;
+			}
+
+			HashSet<string> visibleTaskIds = _taskRepo
+				.GetAll()
+				.Where(t => visible.Contains(t.ProjectId))
+				.Select(t => t.Id)
+				.ToHashSet();
+
+			return all
+				.Where(s => visibleTaskIds.Contains(s.ProjectTaskId)
+					|| visible.Contains(s.ProjectId))
+				.ToList();
 		}
 	}
 }

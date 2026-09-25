@@ -18,5 +18,11 @@ namespace sma.plan
 		public string ProjectId { get; set; }
 
 		public string Name { get; set; }
+
+		public string ShortName { get; set; }
+
+		public string FundingCode { get; set; }
+
+		public bool Billable { get; set; } = true;
 	}
 }

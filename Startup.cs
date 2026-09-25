@@ -28,6 +28,11 @@ namespace sma.plan
 			builder.Services.AddSingleton<ITimeEntryRepo, TimeEntryRepo>();
 			builder.Services.AddSingleton<IProjectTaskRepo, ProjectTaskRepo>();
 			builder.Services.AddSingleton<IProjectSubTaskRepo, ProjectSubTaskRepo>();
+			builder.Services.AddSingleton<IProjectAssignmentRepo, ProjectAssignmentRepo>();
+			builder.Services.AddSingleton<ICustomerRepo, CustomerRepo>();
+			builder.Services.AddSingleton<IProjectBillingRateRepo, ProjectBillingRateRepo>();
+			builder.Services.AddSingleton<IExpenseRepo, ExpenseRepo>();
+			builder.Services.AddSingleton<IExpenseReceiptRepo, ExpenseReceiptRepo>();
 
 			//service definitions
 			builder.Services.AddTransient<ISecurityService, SecurityService>();
@@ -38,6 +43,7 @@ namespace sma.plan
 			builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
 			builder.Services.AddScoped<IProjectTaskService, ProjectTaskService>();
 			builder.Services.AddScoped<IProjectSubTaskService, ProjectSubTaskService>();
+			builder.Services.AddScoped<IProjectAssignmentService, ProjectAssignmentService>();
 
 
 

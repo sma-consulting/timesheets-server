@@ -1,4 +1,6 @@
-﻿using Microsoft.Azure.Functions.Extensions.DependencyInjection;
+﻿using Azure.Identity;
+using Azure.Storage.Blobs;
+using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
@@ -33,6 +35,35 @@ namespace sma.plan
 			builder.Services.AddSingleton<IProjectBillingRateRepo, ProjectBillingRateRepo>();
 			builder.Services.AddSingleton<IExpenseRepo, ExpenseRepo>();
 			builder.Services.AddSingleton<IExpenseReceiptRepo, ExpenseReceiptRepo>();
+
+			// Receipt files. Locally a connection string (Azurite); in Azure the
+			// account URL plus the Function App's managed identity, so no key is
+			// stored anywhere.
+			builder.Services.AddSingleton(sp =>
+			{
+				string connection = Environment.GetEnvironmentVariable("RECEIPT_STORAGE_CONNECTION");
+				string url = Environment.GetEnvironmentVariable("RECEIPT_STORAGE_URL");
+				string container = Environment.GetEnvironmentVariable("RECEIPT_CONTAINER_NAME") ?? "expense-receipts";
+
+				BlobServiceClient service;
+				if (!string.IsNullOrWhiteSpace(connection))
+				{
+					service = new BlobServiceClient(connection);
+				}
+				else if (!string.IsNullOrWhiteSpace(url))
+				{
+					service = new BlobServiceClient(new Uri(url), new DefaultAzureCredential());
+				}
+				else
+				{
+					throw new InvalidOperationException(
+						"Set RECEIPT_STORAGE_CONNECTION or RECEIPT_STORAGE_URL so receipts can be stored.");
+				}
+
+				BlobContainerClient client = service.GetBlobContainerClient(container);
+				client.CreateIfNotExists(); // private by default
+				return client;
+			});
 
 			//service definitions
 			builder.Services.AddTransient<ISecurityService, SecurityService>();

@@ -325,7 +325,7 @@ namespace sma.plan
 		// approval locks it. The receipt goes with it.
 		[FunctionName("DeleteExpense")]
 		public async Task<IActionResult> RunDeleteExpense(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "expense/{id}/delete/")] HttpRequest req, string id)
+			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "expense/{id}/")] HttpRequest req, string id)
 		{
 			Expense expense = _expenseRepo.Get(id);
 			if (expense == null)
@@ -378,12 +378,14 @@ namespace sma.plan
 			}
 
 			ExpenseReceipt receipt = _receiptRepo.Get(expense.ReceiptId);
-			if (receipt == null || receipt.Data == null)
+			Stream file = receipt == null ? null : _receiptRepo.OpenRead(receipt);
+			if (file == null)
 			{
 				return Invalid("That receipt no longer exists.");
 			}
 
-			return new FileContentResult(receipt.Data, receipt.ContentType ?? "application/octet-stream");
+			// Streamed from storage rather than loaded whole; disposed once sent.
+			return new FileStreamResult(file, receipt.ContentType ?? "application/octet-stream");
 		}
 
 

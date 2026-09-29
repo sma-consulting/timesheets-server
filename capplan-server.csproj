@@ -38,6 +38,10 @@
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>
   </ItemGroup>
+  <ItemGroup>
+	<!-- Azure.Core needs this newer version; the Functions SDK strips it by default. -->
+	<FunctionsPreservedDependencies Include="System.Memory.Data.dll" />
+  </ItemGroup>
   <Target Name="GitVersion" />
   <Target Name="PopulateInfo" DependsOnTargets="GitVersion" BeforeTargets="GetAssemblyVersion;GenerateNuspec;GetPackageContents;">
     <PropertyGroup>

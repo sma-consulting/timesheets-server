@@ -163,17 +163,38 @@ namespace sma.plan
 				: timeEntry.TeamMemberId;
 		}
 
+		// A new entry starts its audit trail clean, whatever the client sent, so
+		// the first snapshot an update takes records who created it and when.
 		public TimeEntry Create(TimeEntry timeEntry)
 		{
 			_securityService.AuthorizeUser();
 			timeEntry.TeamMemberId = OwnerFor(timeEntry);
+			timeEntry.History = new List<TimeEntry>();
+			timeEntry.LastModified = DateTime.UtcNow;
+			timeEntry.ModifiedBy = _securityService.GetCurrentTeamMemberId();
 			return _repo.Create(timeEntry);
 		}
 
+		// The update replaces the whole stored entry, and the client never sends
+		// the audit fields - so they're carried over from what's stored rather
+		// than taken from the request, then the old version goes onto History.
 		public TimeEntry Update(TimeEntry timeEntry)
 		{
 			_securityService.AuthorizeUser();
 			timeEntry.TeamMemberId = OwnerFor(timeEntry);
+
+			TimeEntry existing = _repo.Get(timeEntry.Id);
+			timeEntry.History = existing.History ?? new List<TimeEntry>();
+			timeEntry.LastModified = existing.LastModified;
+			timeEntry.ModifiedBy = existing.ModifiedBy;
+
+			if (!timeEntry.SameAs(existing))
+			{
+				timeEntry.History.Add(existing.AuditClone());
+				timeEntry.LastModified = DateTime.UtcNow;
+				timeEntry.ModifiedBy = _securityService.GetCurrentTeamMemberId();
+			}
+
 			return _repo.Update(timeEntry).Item2;
 		}
 

@@ -70,7 +70,7 @@ namespace sma.plan
         // longer exists.
         [FunctionName("DeleteProjectRole")]
         public async Task<IActionResult> RunDeleteProjectRole(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectRole/{id}/delete/")] HttpRequest req, string id)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectRole/{id}/")] HttpRequest req, string id)
         {
             if (!_securityService.IsCurrentUserAdmin())
             {

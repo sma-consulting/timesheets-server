@@ -47,7 +47,7 @@ namespace sma.plan
 
 		[FunctionName("DeleteTeamMember")]
         public async Task<IActionResult> RunDeleteTeamMember(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "teamMember/{id}/delete/")] HttpRequest req, string id)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "teamMember/{id}/")] HttpRequest req, string id)
         {
             return Ok(
                 () => (new DatabaseRepo<TeamMember>()).Delete(id),

@@ -49,7 +49,7 @@ namespace sma.plan
 
 		[FunctionName("DeleteProjectAssignment")]
 		public async Task<IActionResult> RunDeleteProjectAssignment(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectAssignment/{id}/delete/")] HttpRequest req, string id)
+			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectAssignment/{id}/")] HttpRequest req, string id)
 		{
 			if (!_securityService.IsCurrentUserAdmin())
 			{

@@ -52,7 +52,7 @@ namespace sma.plan
 		// that no longer exists.
 		[FunctionName("DeleteProjectSubTask")]
 		public async Task<IActionResult> RunDeleteProjectSubTask(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectSubTask/{id}/delete/")] HttpRequest req, string id)
+			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectSubTask/{id}/")] HttpRequest req, string id)
 		{
 			if (!_securityService.IsCurrentUserAdmin())
 			{

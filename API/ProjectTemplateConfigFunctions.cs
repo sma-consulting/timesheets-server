@@ -45,7 +45,7 @@ namespace sma.plan
 
         [FunctionName("DeleteProjectTemplate")]
         public static async Task<IActionResult> RunDeleteProjectTemplate(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectTemplate/{id}/delete/")] HttpRequest req, string id)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectTemplate/{id}/")] HttpRequest req, string id)
         {
             return Ok(
                 () => (new DatabaseRepo<ProjectTemplate>()).Delete(id),

@@ -45,7 +45,7 @@ namespace sma.plan
 
         [FunctionName("DeleteCalendar")]
         public static async Task<IActionResult> RunDeleteCalendar(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "calendar/{id}/delete/")] HttpRequest req, string id)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "calendar/{id}/")] HttpRequest req, string id)
         {
             return Ok(
                 () => (new DatabaseRepo<Calendar>()).Delete(id),

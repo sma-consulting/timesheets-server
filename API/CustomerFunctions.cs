@@ -113,7 +113,7 @@ namespace sma.plan
 		// leave those projects, and every time entry on them, billed to nobody.
 		[FunctionName("DeleteCustomer")]
 		public async Task<IActionResult> RunDeleteCustomer(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "customer/{id}/delete/")] HttpRequest req, string id)
+			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "customer/{id}/")] HttpRequest req, string id)
 		{
 			if (!_securityService.IsCurrentUserAdmin())
 			{

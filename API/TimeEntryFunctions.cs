@@ -52,7 +52,7 @@ namespace sma.plan
 
 		[FunctionName("DeleteTimeEntry")]
 		public async Task<IActionResult> RunDeleteTimeEntry(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "timeEntry/{id}/delete/")] HttpRequest req, string id)
+			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "timeEntry/{id}/")] HttpRequest req, string id)
 		{
 			if (!_timeEntryService.MayWrite(id))
 			{

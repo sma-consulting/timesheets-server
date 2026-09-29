@@ -55,7 +55,7 @@ namespace sma.plan
 		// sub-tasks, so no entry is ever left pointing at a deleted task.
 		[FunctionName("DeleteProjectTask")]
 		public async Task<IActionResult> RunDeleteProjectTask(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectTask/{id}/delete/")] HttpRequest req, string id)
+			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectTask/{id}/")] HttpRequest req, string id)
 		{
 			if (!_securityService.IsCurrentUserAdmin())
 			{

@@ -168,7 +168,7 @@ namespace sma.plan
 		// middle would open a gap.
 		[FunctionName("DeleteProjectBillingRate")]
 		public async Task<IActionResult> RunDeleteProjectBillingRate(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectBillingRate/{id}/delete/")] HttpRequest req, string id)
+			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectBillingRate/{id}/")] HttpRequest req, string id)
 		{
 			if (!_securityService.IsCurrentUserAdmin())
 			{

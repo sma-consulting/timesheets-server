@@ -112,7 +112,7 @@ namespace sma.plan
 
         [FunctionName("DeleteUser")]
         public async Task<IActionResult> RunDeleteUser(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "user/{id}/delete/")] HttpRequest req, string id)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "user/{id}/")] HttpRequest req, string id)
         {
             if (!_securityService.IsCurrentUserAdmin())
             {

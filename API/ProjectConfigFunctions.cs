@@ -74,7 +74,7 @@ namespace sma.plan
 
         [FunctionName("DeleteProject")]
         public async Task<IActionResult> RunDeleteProject(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "project/{id}/delete/")] HttpRequest req, string id)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "project/{id}/")] HttpRequest req, string id)
         {
             if (!_securityService.IsCurrentUserAdmin())
             {

@@ -21,8 +21,7 @@ namespace sma.plan
 
 		public string ShortName { get; set; }
 
-		public string FundingCode { get; set; }
-
+		// No FundingCode: only the project has a code (Project.FundingCode).
 		// No Billable here: whether time is billable is set on each sub-task
 		// (ProjectSubTask.Billable), the level the invoice prices at. Tasks saved
 		// with the old field still load - GeneralModel ignores extra elements.

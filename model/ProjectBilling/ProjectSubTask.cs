@@ -23,7 +23,8 @@ namespace sma.plan
 
 		public string ShortName { get; set; }
 
-		public string FundingCode { get; set; }
+		// No FundingCode: only the project has a code (Project.FundingCode).
+		// Sub-tasks saved with one still load - GeneralModel ignores extra elements.
 
 		public bool Billable { get; set; } = true;
 	}

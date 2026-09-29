@@ -135,7 +135,7 @@ namespace sma.plan
 		// Approved expenses are locked for everyone. Otherwise owners may change
 		// their own, which sends it back to Submitted for a fresh review - a fixed
 		// claim needs looking at again - and admins may change any, leaving the
-		// status alone.
+		// status alone, but may not replace its receipt.
 		[FunctionName("UpdateExpense")]
 		public async Task<IActionResult> RunUpdateExpense(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "expense/{id}/update/")] HttpRequest req, string id)
@@ -167,6 +167,13 @@ namespace sma.plan
 
 			IFormCollection form = await req.ReadFormAsync();
 			IFormFile file = form.Files["receipt"];
+
+			// The receipt is the claimant's evidence, so admins never swap it - they
+			// can correct a claim's fields, not the proof behind it.
+			if (file != null && admin)
+			{
+				return Forbidden("Admins can't replace receipts.");
+			}
 
 			Expense changes;
 			string invalid = Parse(form, out changes);

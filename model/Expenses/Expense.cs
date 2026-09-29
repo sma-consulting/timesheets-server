@@ -59,6 +59,17 @@ namespace sma.plan
 
 		public DateTime SubmittedAt { get; set; }
 
+		// The admin's decision. Cleared when the claim goes back to Submitted -
+		// sent back by an admin, or changed by its owner.
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string ReviewedBy { get; set; }
+
+		public DateTime? ReviewedAt { get; set; }
+
+		// Why it was rejected; required for a rejection, so the owner knows
+		// what to fix.
+		public string RejectionReason { get; set; }
+
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string ReceiptId { get; set; }
 

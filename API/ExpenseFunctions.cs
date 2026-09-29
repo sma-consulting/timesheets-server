@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
+using Newtonsoft.Json;
 using System;
 using System.Globalization;
 using System.IO;
@@ -128,8 +129,193 @@ namespace sma.plan
 		}
 
 
-		// Owners may delete their own while it is still waiting for review; admins
-		// may delete any. The receipt goes with it.
+		// Changes an expense. Same form as submitting, but the receipt is optional:
+		// leave it out to keep the current one, attach one to replace it.
+		//
+		// Approved expenses are locked for everyone. Otherwise owners may change
+		// their own, which sends it back to Submitted for a fresh review - a fixed
+		// claim needs looking at again - and admins may change any, leaving the
+		// status alone.
+		[FunctionName("UpdateExpense")]
+		public async Task<IActionResult> RunUpdateExpense(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "expense/{id}/update/")] HttpRequest req, string id)
+		{
+			Expense existing = _expenseRepo.Get(id);
+			if (existing == null)
+			{
+				return Invalid("That expense no longer exists.");
+			}
+
+			bool admin = _securityService.IsCurrentUserAdmin();
+			bool mine = existing.TeamMemberId == _securityService.GetCurrentTeamMemberId();
+
+			if (!admin && !mine)
+			{
+				return Forbidden("That expense belongs to someone else.");
+			}
+			// Approval locks an expense for everyone, admins included; an admin
+			// sends it back to review to unlock it.
+			if (existing.Status == Expense.StatusApproved)
+			{
+				return Invalid("This expense is approved and locked. Send it back to review to change it.");
+			}
+
+			if (!req.HasFormContentType)
+			{
+				return Invalid("Send the expense as a form.");
+			}
+
+			IFormCollection form = await req.ReadFormAsync();
+			IFormFile file = form.Files["receipt"];
+
+			Expense changes;
+			string invalid = Parse(form, out changes);
+			if (invalid == null && file != null)
+			{
+				invalid = ValidateReceipt(file);
+			}
+			if (invalid != null)
+			{
+				return Invalid(invalid);
+			}
+
+			if (!_projectService.MayView(changes.ProjectId))
+			{
+				return Forbidden("You are not assigned to that project.");
+			}
+
+			byte[] bytes = null;
+			if (file != null)
+			{
+				using (var buffer = new MemoryStream())
+				{
+					await file.CopyToAsync(buffer);
+					bytes = buffer.ToArray();
+				}
+			}
+
+			return Ok(
+				() =>
+				{
+					existing.ProjectId = changes.ProjectId;
+					existing.ProjectTaskId = changes.ProjectTaskId;
+					existing.Date = changes.Date;
+					existing.Category = changes.Category;
+					existing.Notes = changes.Notes;
+					existing.Amount = changes.Amount;
+					existing.Billable = changes.Billable;
+
+					if (!admin)
+					{
+						existing.Status = Expense.StatusSubmitted;
+						existing.ReviewedBy = null;
+						existing.ReviewedAt = null;
+						existing.RejectionReason = null;
+					}
+
+					if (bytes != null)
+					{
+						string oldReceiptId = existing.ReceiptId;
+						ExpenseReceipt receipt = _receiptRepo.Create(new ExpenseReceipt
+						{
+							TeamMemberId = existing.TeamMemberId,
+							FileName = Path.GetFileName(file.FileName),
+							ContentType = file.ContentType,
+							Data = bytes,
+							UploadedAt = DateTime.UtcNow,
+						});
+						existing.ReceiptId = receipt.Id;
+						existing.ReceiptName = receipt.FileName;
+						existing.ReceiptContentType = receipt.ContentType;
+
+						if (!string.IsNullOrWhiteSpace(oldReceiptId))
+						{
+							_receiptRepo.Delete(oldReceiptId);
+						}
+					}
+
+					return _expenseRepo.Update(existing).Item2;
+				},
+				(e) => new { expense = e });
+		}
+
+
+		// An admin's decision on a claim: Approved, Rejected (with a reason), or
+		// back to Submitted to undo a decision - which is also how an approved,
+		// locked claim is unlocked. Admins can't review their own claims, and a
+		// reimbursed claim is settled and can't be reviewed again.
+		[FunctionName("ReviewExpense")]
+		public async Task<IActionResult> RunReviewExpense(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "expense/{id}/review/")] HttpRequest req, string id)
+		{
+			if (!_securityService.IsCurrentUserAdmin())
+			{
+				return Forbidden("Only admins can review expenses.");
+			}
+
+			Expense expense = _expenseRepo.Get(id);
+			if (expense == null)
+			{
+				return Invalid("That expense no longer exists.");
+			}
+
+			string me = _securityService.GetCurrentTeamMemberId();
+			if (!string.IsNullOrWhiteSpace(me) && expense.TeamMemberId == me)
+			{
+				return Forbidden("Another admin must review your own expenses.");
+			}
+			if (expense.Reimbursed)
+			{
+				return Invalid("This expense has been reimbursed and can't be reviewed again.");
+			}
+
+			ReviewRequest review = JsonConvert.DeserializeObject<ReviewRequest>(
+				await new StreamReader(req.Body).ReadToEndAsync());
+			string status = review?.Status;
+			string reason = (review?.RejectionReason ?? "").Trim();
+
+			if (status != Expense.StatusApproved &&
+				status != Expense.StatusRejected &&
+				status != Expense.StatusSubmitted)
+			{
+				return Invalid("Choose approve, reject or back to review.");
+			}
+			if (status == Expense.StatusRejected && reason.Length == 0)
+			{
+				return Invalid("Give a reason for rejecting the expense.");
+			}
+
+			return Ok(
+				() =>
+				{
+					expense.Status = status;
+					if (status == Expense.StatusSubmitted)
+					{
+						expense.ReviewedBy = null;
+						expense.ReviewedAt = null;
+						expense.RejectionReason = null;
+					}
+					else
+					{
+						expense.ReviewedBy = me;
+						expense.ReviewedAt = DateTime.UtcNow;
+						expense.RejectionReason = status == Expense.StatusRejected ? reason : null;
+					}
+					return _expenseRepo.Update(expense).Item2;
+				},
+				(e) => new { expense = e });
+		}
+
+		private class ReviewRequest
+		{
+			public string Status { get; set; }
+
+			public string RejectionReason { get; set; }
+		}
+
+
+		// Owners may delete their own, and admins any, until it's approved -
+		// approval locks it. The receipt goes with it.
 		[FunctionName("DeleteExpense")]
 		public async Task<IActionResult> RunDeleteExpense(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "expense/{id}/delete/")] HttpRequest req, string id)
@@ -147,9 +333,9 @@ namespace sma.plan
 			{
 				return Forbidden("That expense belongs to someone else.");
 			}
-			if (!admin && expense.Status != Expense.StatusSubmitted)
+			if (expense.Status == Expense.StatusApproved)
 			{
-				return Invalid("Only expenses still waiting for review can be deleted.");
+				return Invalid("This expense is approved and locked. Send it back to review to delete it.");
 			}
 
 			return Ok(

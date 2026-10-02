@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
@@ -34,7 +33,8 @@ namespace sma.plan
 			_logger = logger;
 		}
 
-		[FunctionName("CreateProjectTask")]
+		[Allow(Role.Admin)]
+		[Function("CreateProjectTask")]
 		public async Task<IActionResult> RunCreateProjectTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectTask/")] HttpRequest req)
 		{
@@ -53,7 +53,8 @@ namespace sma.plan
 		// Admin-only. Deletes the task's sub-tasks with it - they can't exist
 		// without it. Refused while time is logged against the task or any of its
 		// sub-tasks, so no entry is ever left pointing at a deleted task.
-		[FunctionName("DeleteProjectTask")]
+		[Allow(Role.Admin)]
+		[Function("DeleteProjectTask")]
 		public async Task<IActionResult> RunDeleteProjectTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectTask/{id}/")] HttpRequest req, string id)
 		{
@@ -94,7 +95,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("GetProjectTask")]
+		[Allow(Role.SignedIn)]
+		[Function("GetProjectTask")]
 		public async Task<IActionResult> RunGetProjectTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectTask/{id}/")] HttpRequest req, string id)
 		{
@@ -107,7 +109,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("UpdateProjectTask")]
+		[Allow(Role.Admin)]
+		[Function("UpdateProjectTask")]
 		public async Task<IActionResult> RunUpdateProjectTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectTask/{id}/update/")] HttpRequest req, string id)
 		{
@@ -124,7 +127,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("GetAllProjectTask")]
+		[Allow(Role.SignedIn)]
+		[Function("GetAllProjectTask")]
 		public async Task<IActionResult> RunGetAllProjectTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectTask/")] HttpRequest req)
 		{

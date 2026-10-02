@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Newtonsoft.Json;
 using System;
 using System.Globalization;
@@ -43,7 +42,8 @@ namespace sma.plan
 
 
 		// Your own expenses, or everyone's for an admin.
-		[FunctionName("GetExpenses")]
+		[Allow(Role.SignedIn)]
+		[Function("GetExpenses")]
 		public async Task<IActionResult> RunGetExpenses(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "expense/")] HttpRequest req)
 		{
@@ -62,7 +62,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("CreateExpense")]
+		[Allow(Role.SignedIn)]
+		[Function("CreateExpense")]
 		public async Task<IActionResult> RunCreateExpense(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "expense/")] HttpRequest req)
 		{
@@ -136,7 +137,8 @@ namespace sma.plan
 		// their own, which sends it back to Submitted for a fresh review - a fixed
 		// claim needs looking at again - and admins may change any, leaving the
 		// status alone, but may not replace its receipt.
-		[FunctionName("UpdateExpense")]
+		[Allow(Role.SignedIn)]
+		[Function("UpdateExpense")]
 		public async Task<IActionResult> RunUpdateExpense(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "expense/{id}/update/")] HttpRequest req, string id)
 		{
@@ -251,7 +253,8 @@ namespace sma.plan
 		// back to Submitted to undo a decision - which is also how an approved,
 		// locked claim is unlocked. Admins can't review their own claims, and a
 		// reimbursed claim is settled and can't be reviewed again.
-		[FunctionName("ReviewExpense")]
+		[Allow(Role.Admin)]
+		[Function("ReviewExpense")]
 		public async Task<IActionResult> RunReviewExpense(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "expense/{id}/review/")] HttpRequest req, string id)
 		{
@@ -323,7 +326,8 @@ namespace sma.plan
 
 		// Owners may delete their own, and admins any, until it's approved -
 		// approval locks it. The receipt goes with it.
-		[FunctionName("DeleteExpense")]
+		[Allow(Role.SignedIn)]
+		[Function("DeleteExpense")]
 		public async Task<IActionResult> RunDeleteExpense(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "expense/{id}/")] HttpRequest req, string id)
 		{
@@ -360,7 +364,8 @@ namespace sma.plan
 
 		// The receipt file itself, for viewing - not the usual JSON envelope,
 		// except when it can't be returned.
-		[FunctionName("GetExpenseReceipt")]
+		[Allow(Role.SignedIn)]
+		[Function("GetExpenseReceipt")]
 		public async Task<IActionResult> RunGetExpenseReceipt(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "expense/{id}/receipt/")] HttpRequest req, string id)
 		{

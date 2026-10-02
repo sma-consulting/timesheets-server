@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Core.Events;
 using Newtonsoft.Json;
@@ -29,7 +28,8 @@ namespace sma.plan
             _logger = logger;
 		}  
 
-		[FunctionName("CreateTeamMember")]
+		[Allow(Role.Admin)]
+		[Function("CreateTeamMember")]
 		public async Task<IActionResult> RunCreateTeamMember(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "teamMember/")] HttpRequest req)
 		{
@@ -45,7 +45,8 @@ namespace sma.plan
         }
 
 
-		[FunctionName("DeleteTeamMember")]
+		[Allow(Role.Admin)]
+		[Function("DeleteTeamMember")]
         public async Task<IActionResult> RunDeleteTeamMember(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "teamMember/{id}/")] HttpRequest req, string id)
         {
@@ -58,7 +59,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("GetTeamMember")]
+        [Allow(Role.SignedIn)]
+        [Function("GetTeamMember")]
         public async Task<IActionResult> RunGetTeamMember(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "teamMember/{id}/")] HttpRequest req, string id)
         {
@@ -71,7 +73,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("UpdateTeamMember")]
+        [Allow(Role.Admin)]
+        [Function("UpdateTeamMember")]
         public async Task<IActionResult> RunUpdateTeamMember(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "teamMember/{id}/update/")] HttpRequest req, string id)
         {
@@ -88,7 +91,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("GetAllTeamMember")]
+        [Allow(Role.SignedIn)]
+        [Function("GetAllTeamMember")]
         public async Task<IActionResult> RunGetAllTeamMember(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "teamMember/")] HttpRequest req)
         {

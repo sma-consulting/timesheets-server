@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Newtonsoft.Json;
 using System;
 using System.IO;
@@ -28,7 +27,8 @@ namespace sma.plan
 			_securityService = securityService;
 		}
 
-		[FunctionName("CreateCustomer")]
+		[Allow(Role.Admin)]
+		[Function("CreateCustomer")]
 		public async Task<IActionResult> RunCreateCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "customer/")] HttpRequest req)
 		{
@@ -55,7 +55,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("GetCustomer")]
+		[Allow(Role.SignedIn)]
+		[Function("GetCustomer")]
 		public async Task<IActionResult> RunGetCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "customer/{id}/")] HttpRequest req, string id)
 		{
@@ -68,7 +69,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("GetAllCustomer")]
+		[Allow(Role.SignedIn)]
+		[Function("GetAllCustomer")]
 		public async Task<IActionResult> RunGetAllCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "customer/")] HttpRequest req)
 		{
@@ -81,7 +83,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("UpdateCustomer")]
+		[Allow(Role.Admin)]
+		[Function("UpdateCustomer")]
 		public async Task<IActionResult> RunUpdateCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "customer/{id}/update/")] HttpRequest req, string id)
 		{
@@ -111,7 +114,8 @@ namespace sma.plan
 
 		// Refused while any project still points at the customer - deleting it would
 		// leave those projects, and every time entry on them, billed to nobody.
-		[FunctionName("DeleteCustomer")]
+		[Allow(Role.Admin)]
+		[Function("DeleteCustomer")]
 		public async Task<IActionResult> RunDeleteCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "customer/{id}/")] HttpRequest req, string id)
 		{

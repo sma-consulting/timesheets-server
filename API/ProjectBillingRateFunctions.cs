@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -35,7 +34,8 @@ namespace sma.plan
 			_securityService = securityService;
 		}
 
-		[FunctionName("GetProjectBillingRates")]
+		[Allow(Role.Admin)]
+		[Function("GetProjectBillingRates")]
 		public async Task<IActionResult> RunGetProjectBillingRates(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectBillingRate/")] HttpRequest req)
 		{
@@ -62,7 +62,8 @@ namespace sma.plan
 		// The usual way to change a rate: add a row starting on the day the new
 		// rate applies. If the role's latest row is still open-ended and starts
 		// earlier, it is closed the day before, so the handover leaves no gap.
-		[FunctionName("CreateProjectBillingRate")]
+		[Allow(Role.Admin)]
+		[Function("CreateProjectBillingRate")]
 		public async Task<IActionResult> RunCreateProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectBillingRate/")] HttpRequest req)
 		{
@@ -118,7 +119,8 @@ namespace sma.plan
 		// Project and role can't be changed - that would move the row onto a
 		// different timeline. Changing the rate alone always passes; changing
 		// dates must keep the timeline unbroken.
-		[FunctionName("UpdateProjectBillingRate")]
+		[Allow(Role.Admin)]
+		[Function("UpdateProjectBillingRate")]
 		public async Task<IActionResult> RunUpdateProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectBillingRate/{id}/update/")] HttpRequest req, string id)
 		{
@@ -166,7 +168,8 @@ namespace sma.plan
 
 		// Only the first or last row of a timeline may go: removing one from the
 		// middle would open a gap.
-		[FunctionName("DeleteProjectBillingRate")]
+		[Allow(Role.Admin)]
+		[Function("DeleteProjectBillingRate")]
 		public async Task<IActionResult> RunDeleteProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectBillingRate/{id}/")] HttpRequest req, string id)
 		{

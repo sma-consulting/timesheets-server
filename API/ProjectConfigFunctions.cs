@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Core.Events;
 using Newtonsoft.Json;
@@ -40,7 +39,8 @@ namespace sma.plan
             _logger = logger;
         }
 
-        [FunctionName("CreateProject")]
+        [Allow(Role.Admin)]
+        [Function("CreateProject")]
         public async Task<IActionResult> RunCreateProject(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "project/")] HttpRequest req)
         {
@@ -72,7 +72,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("DeleteProject")]
+        [Allow(Role.Admin)]
+        [Function("DeleteProject")]
         public async Task<IActionResult> RunDeleteProject(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "project/{id}/")] HttpRequest req, string id)
         {
@@ -90,7 +91,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("GetProject")]
+        [Allow(Role.SignedIn)]
+        [Function("GetProject")]
         public async Task<IActionResult> RunGetProject(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "project/{id}/")] HttpRequest req, string id)
         {
@@ -108,7 +110,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("UpdateProject")]
+        [Allow(Role.Admin)]
+        [Function("UpdateProject")]
         public async Task<IActionResult> RunUpdateProject(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "project/{id}/update/")] HttpRequest req, string id)
         {
@@ -221,7 +224,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("GetAllProject")]
+        [Allow(Role.SignedIn)]
+        [Function("GetAllProject")]
         public async Task<IActionResult> RunGetAllProject(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "project/")] HttpRequest req)
         {

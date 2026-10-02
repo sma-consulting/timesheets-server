@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Core.Events;
 using Newtonsoft.Json;
@@ -31,7 +30,8 @@ namespace sma.plan
 			_logger = logger;
 		}
 
-		[FunctionName("CreateTimeCard")]
+		[Allow(Role.Admin)]
+		[Function("CreateTimeCard")]
 		public async Task<IActionResult> RunCreateTimeCard(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "teamMember/{id}/timeCards/{date}/create")] HttpRequest req,
 			string id, string date)
@@ -52,7 +52,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("GetTimeCard")]
+		[Allow(Role.Admin)]
+		[Function("GetTimeCard")]
 		public async Task<IActionResult> RunGetTimeCard(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "teamMember/{id}/timeCard/{month}")] HttpRequest req, string id)
 		{

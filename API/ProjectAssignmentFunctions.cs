@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
@@ -26,7 +25,8 @@ namespace sma.plan
 			_logger = logger;
 		}
 
-		[FunctionName("CreateProjectAssignment")]
+		[Allow(Role.Admin)]
+		[Function("CreateProjectAssignment")]
 		public async Task<IActionResult> RunCreateProjectAssignment(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectAssignment/")] HttpRequest req)
 		{
@@ -47,7 +47,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("DeleteProjectAssignment")]
+		[Allow(Role.Admin)]
+		[Function("DeleteProjectAssignment")]
 		public async Task<IActionResult> RunDeleteProjectAssignment(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectAssignment/{id}/")] HttpRequest req, string id)
 		{
@@ -65,7 +66,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("GetProjectAssignments")]
+		[Allow(Role.SignedIn)]
+		[Function("GetProjectAssignments")]
 		public async Task<IActionResult> RunGetProjectAssignments(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectAssignment/")] HttpRequest req)
 		{

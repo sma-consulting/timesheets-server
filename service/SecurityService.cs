@@ -30,15 +30,19 @@ namespace sma.plan {
 	{
 		private const string EmailUriClaim = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
 
-		private ClaimsPrincipal _principal;
-		private HttpContext _httpContext;
+		private RequestContext _request;
 		private IUserRepo _userRepo;
 		private ITeamMemberRepo _teamMemberRepo;
 
-		public SecurityService(IHttpContextAccessor httpContext, IUserRepo userRepo, ITeamMemberRepo teamMemberRepo)
+		// The current call's request, handed over by RequestContextMiddleware.
+		// Read when needed rather than at construction, so it's always the
+		// request actually being handled.
+		private HttpContext _httpContext => _request.HttpContext;
+		private ClaimsPrincipal _principal => _request.HttpContext?.User;
+
+		public SecurityService(RequestContext request, IUserRepo userRepo, ITeamMemberRepo teamMemberRepo)
 		{
-			_principal = httpContext.HttpContext.User;
-			_httpContext = httpContext.HttpContext;
+			_request = request;
 			_userRepo = userRepo;
 			_teamMemberRepo = teamMemberRepo;
 		}
@@ -147,7 +151,7 @@ namespace sma.plan {
 
 		public string WhoAmI()
 		{
-			return _principal.GetUserName();
+			return _principal?.GetUserName();
 		}
 
 		public bool AuthorizeUser()

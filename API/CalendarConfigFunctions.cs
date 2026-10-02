@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Core.Events;
 using Newtonsoft.Json;
@@ -27,7 +26,8 @@ namespace sma.plan
             _logger = logger;
         }
 
-        [FunctionName("CreateCalendar")]
+        [Allow(Role.Admin)]
+        [Function("CreateCalendar")]
         public static async Task<IActionResult> RunCreateCalendar(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "calendar/create/")] HttpRequest req)
         {
@@ -43,7 +43,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("DeleteCalendar")]
+        [Allow(Role.Admin)]
+        [Function("DeleteCalendar")]
         public static async Task<IActionResult> RunDeleteCalendar(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "calendar/{id}/")] HttpRequest req, string id)
         {
@@ -56,7 +57,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("GetCalendar")]
+        [Allow(Role.Admin)]
+        [Function("GetCalendar")]
         public static async Task<IActionResult> RunGetCalendar(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "calendar/{id}/")] HttpRequest req, string id)
         {
@@ -69,7 +71,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("UpdateCalendar")]
+        [Allow(Role.Admin)]
+        [Function("UpdateCalendar")]
         public static async Task<IActionResult> RunUpdateCalendar(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "calendar/{id}/update/")] HttpRequest req, string id)
         {

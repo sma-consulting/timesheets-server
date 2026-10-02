@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
@@ -38,7 +37,8 @@ namespace sma.plan
             _rateRepo = rateRepo;
         }
 
-        [FunctionName("CreateProjectRole")]
+        [Allow(Role.Admin)]
+        [Function("CreateProjectRole")]
         public async Task<IActionResult> RunCreateProjectRole(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectRole/create/")] HttpRequest req)
         {
@@ -68,7 +68,8 @@ namespace sma.plan
         // Refused while the role is in use - deleting it would leave those
         // assignments, team members and billing rates pointing at a role that no
         // longer exists.
-        [FunctionName("DeleteProjectRole")]
+        [Allow(Role.Admin)]
+        [Function("DeleteProjectRole")]
         public async Task<IActionResult> RunDeleteProjectRole(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectRole/{id}/")] HttpRequest req, string id)
         {
@@ -99,7 +100,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("GetProjectRole")]
+        [Allow(Role.SignedIn)]
+        [Function("GetProjectRole")]
         public async Task<IActionResult> RunGetProjectRole(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectRole/{id}/")] HttpRequest req, string id)
         {
@@ -112,7 +114,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("GetAllProjectRole")]
+        [Allow(Role.SignedIn)]
+        [Function("GetAllProjectRole")]
         public async Task<IActionResult> RunGetAllProjectRole(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectRole/")] HttpRequest req)
         {
@@ -125,7 +128,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("UpdateProjectRole")]
+        [Allow(Role.Admin)]
+        [Function("UpdateProjectRole")]
         public async Task<IActionResult> RunUpdateProjectRole(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectRole/{id}/update/")] HttpRequest req, string id)
         {

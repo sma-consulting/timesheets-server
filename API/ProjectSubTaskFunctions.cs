@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
@@ -31,7 +30,8 @@ namespace sma.plan
 			_logger = logger;
 		}
 
-		[FunctionName("CreateProjectSubTask")]
+		[Allow(Role.Admin)]
+		[Function("CreateProjectSubTask")]
 		public async Task<IActionResult> RunCreateProjectSubTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectSubTask/")] HttpRequest req)
 		{
@@ -50,7 +50,8 @@ namespace sma.plan
 		// Admin-only. Refused while time is logged against the sub-task: those
 		// entries feed payroll and invoices, and would be left pointing at a task
 		// that no longer exists.
-		[FunctionName("DeleteProjectSubTask")]
+		[Allow(Role.Admin)]
+		[Function("DeleteProjectSubTask")]
 		public async Task<IActionResult> RunDeleteProjectSubTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectSubTask/{id}/")] HttpRequest req, string id)
 		{
@@ -76,7 +77,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("GetProjectSubTask")]
+		[Allow(Role.SignedIn)]
+		[Function("GetProjectSubTask")]
 		public async Task<IActionResult> RunGetProjectSubTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectSubTask/{id}/")] HttpRequest req, string id)
 		{
@@ -89,7 +91,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("UpdateProjectSubTask")]
+		[Allow(Role.Admin)]
+		[Function("UpdateProjectSubTask")]
 		public async Task<IActionResult> RunUpdateProjectSubTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectSubTask/{id}/update/")] HttpRequest req, string id)
 		{
@@ -106,7 +109,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("GetAllProjectSubTask")]
+		[Allow(Role.SignedIn)]
+		[Function("GetAllProjectSubTask")]
 		public async Task<IActionResult> RunGetAllProjectSubTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectSubTask/")] HttpRequest req)
 		{

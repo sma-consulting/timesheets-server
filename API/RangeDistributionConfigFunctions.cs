@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Core.Events;
 using Newtonsoft.Json;
@@ -28,7 +27,8 @@ namespace sma.plan
             _logger = logger;
         }
 
-        [FunctionName("GetRangeDistribution")]
+        [Allow(Role.SignedIn)]
+        [Function("GetRangeDistribution")]
         public async Task<IActionResult> RunGetRangeDistribution(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "rangeDistribution/{id}/")] HttpRequest req, string id)
         {
@@ -40,7 +40,8 @@ namespace sma.plan
                 });
         }
 
-		[FunctionName("GetAllRangeDistributions")]
+		[Allow(Role.SignedIn)]
+		[Function("GetAllRangeDistributions")]
 		public async Task<IActionResult> RunGetAllRangeDistributions(
 	[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "rangeDistribution/")] HttpRequest req)
 		{
@@ -53,7 +54,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("UpdateRangeDistribution")]
+		[Allow(Role.Admin)]
+		[Function("UpdateRangeDistribution")]
         public async Task<IActionResult> RunUpdateRangeDistribution(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "rangeDistribution/{id}/update/")] HttpRequest req, string id)
         {

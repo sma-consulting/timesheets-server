@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Core.Events;
 using Newtonsoft.Json;
@@ -27,7 +26,8 @@ namespace sma.plan
             _logger = logger;
         }
 
-        [FunctionName("CreateProjectTemplate")]
+        [Allow(Role.Admin)]
+        [Function("CreateProjectTemplate")]
         public static async Task<IActionResult> RunCreateProjectTemplate(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectTemplate/create/")] HttpRequest req)
         {
@@ -43,7 +43,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("DeleteProjectTemplate")]
+        [Allow(Role.Admin)]
+        [Function("DeleteProjectTemplate")]
         public static async Task<IActionResult> RunDeleteProjectTemplate(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectTemplate/{id}/")] HttpRequest req, string id)
         {
@@ -56,7 +57,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("GetProjectTemplate")]
+        [Allow(Role.Admin)]
+        [Function("GetProjectTemplate")]
         public static async Task<IActionResult> RunGetProjectTemplate(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectTemplate/{id}/")] HttpRequest req, string id)
         {
@@ -69,7 +71,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("UpdateProjectTemplate")]
+        [Allow(Role.Admin)]
+        [Function("UpdateProjectTemplate")]
         public static async Task<IActionResult> RunUpdateProjectTemplate(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectTemplate/{id}/update/")] HttpRequest req, string id)
         {

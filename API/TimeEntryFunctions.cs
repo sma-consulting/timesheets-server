@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
@@ -22,7 +21,8 @@ namespace sma.plan
 			_logger = logger;
 		}
 
-		[FunctionName("CreateTimeEntry")]
+		[Allow(Role.SignedIn)]
+		[Function("CreateTimeEntry")]
 		public async Task<IActionResult> RunCreateTimeEntry(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "timeEntry/")] HttpRequest req)
 		{
@@ -50,7 +50,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("DeleteTimeEntry")]
+		[Allow(Role.SignedIn)]
+		[Function("DeleteTimeEntry")]
 		public async Task<IActionResult> RunDeleteTimeEntry(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "timeEntry/{id}/")] HttpRequest req, string id)
 		{
@@ -68,7 +69,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("GetTimeEntry")]
+		[Allow(Role.SignedIn)]
+		[Function("GetTimeEntry")]
 		public async Task<IActionResult> RunGetTimeEntry(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "timeEntry/{id}/")] HttpRequest req, string id)
 		{
@@ -86,7 +88,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("UpdateTimeEntry")]
+		[Allow(Role.SignedIn)]
+		[Function("UpdateTimeEntry")]
 		public async Task<IActionResult> RunUpdateTimeEntry(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "timeEntry/{id}/update/")] HttpRequest req, string id)
 		{
@@ -122,7 +125,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("GetAllTimeEntry")]
+		[Allow(Role.SignedIn)]
+		[Function("GetAllTimeEntry")]
 		public async Task<IActionResult> RunGetAllTimeEntry(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "timeEntry/")] HttpRequest req)
 		{

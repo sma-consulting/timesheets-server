@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Core.Events;
 using Newtonsoft.Json;
@@ -45,7 +44,8 @@ namespace sma.plan
 			});
 		}
 
-		[FunctionName("WhoAmI")]
+		[Allow(Role.Anyone)]
+		[Function("WhoAmI")]
 		public async Task<IActionResult> RunWhoAmI(
 		[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "whoami")] HttpRequest req)
 		{
@@ -66,7 +66,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("Login")]
+		[Allow(Role.Anyone)]
+		[Function("Login")]
 		public async Task<IActionResult> RunLogin(
 		[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "login")] HttpRequest req)
 		{
@@ -87,7 +88,8 @@ namespace sma.plan
 				});
 		}
 
-		[FunctionName("CreateUser")]
+		[Allow(Role.Admin)]
+		[Function("CreateUser")]
         public async Task<IActionResult> RunCreateUser(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "user/create/")] HttpRequest req)
         {
@@ -110,7 +112,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("DeleteUser")]
+        [Allow(Role.Admin)]
+        [Function("DeleteUser")]
         public async Task<IActionResult> RunDeleteUser(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "user/{id}/")] HttpRequest req, string id)
         {
@@ -128,7 +131,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("GetUser")]
+        [Allow(Role.Admin)]
+        [Function("GetUser")]
         public async Task<IActionResult> RunGetUser(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "user/{id}/")] HttpRequest req, string id)
         {
@@ -141,7 +145,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("UpdateUser")]
+        [Allow(Role.Admin)]
+        [Function("UpdateUser")]
         public async Task<IActionResult> RunUpdateUser(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "user/{id}/update/")] HttpRequest req, string id)
         {

@@ -1,26 +1,24 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<!-- Isolated worker model: the functions run in their own .NET process
+     rather than inside the Functions host. -->
+<Project Sdk="Azure.Functions.Sdk/1.0.0">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <AzureFunctionsVersion>v4</AzureFunctionsVersion>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>sma.plan</RootNamespace>
     <GitVersion>false</GitVersion>
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <FunctionsEnableWorkerIndexing>false</FunctionsEnableWorkerIndexing>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.29.2" />
     <PackageReference Include="Azure.Storage.Common" Version="12.28.0" />
-    <PackageReference Include="Azure.Storage.Queues" Version="12.27.1" />
-    <PackageReference Include="Microsoft.Azure.Functions.Extensions" Version="1.1.0" />
+    <!-- Keeps API responses serialized exactly as they were in-process. -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.12" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Core" Version="2.52.0" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.19.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
-    <PackageReference Include="Microsoft.NET.Sdk.Functions" Version="4.2.0" />
     <PackageReference Include="MongoDB.Bson" Version="2.19.2" />
     <PackageReference Include="MongoDB.Driver" Version="2.19.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
@@ -37,10 +35,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-	<!-- Azure.Core needs this newer version; the Functions SDK strips it by default. -->
-	<FunctionsPreservedDependencies Include="System.Memory.Data.dll" />
   </ItemGroup>
   <Target Name="GitVersion" />
   <Target Name="PopulateInfo" DependsOnTargets="GitVersion" BeforeTargets="GetAssemblyVersion;GenerateNuspec;GetPackageContents;">

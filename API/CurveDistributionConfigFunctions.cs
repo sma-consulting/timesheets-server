@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Core.Events;
 using Newtonsoft.Json;
@@ -26,7 +25,8 @@ namespace sma.plan
             _logger = logger;
         }
 
-        [FunctionName("GetCurveDistribution")]
+        [Allow(Role.SignedIn)]
+        [Function("GetCurveDistribution")]
         public async Task<IActionResult> RunGetCurveDistribution(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "curveDistribution/{id}/")] HttpRequest req, string id)
         {
@@ -38,7 +38,8 @@ namespace sma.plan
                 });
         }
 
-		[FunctionName("GetAllCurveDistributions")]
+		[Allow(Role.SignedIn)]
+		[Function("GetAllCurveDistributions")]
 		public async Task<IActionResult> RunGetAllCurveDistributions(
 	[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "curveDistribution/")] HttpRequest req )
 		{
@@ -51,7 +52,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("UpdateCurveDistribution")]
+		[Allow(Role.Admin)]
+		[Function("UpdateCurveDistribution")]
         public async Task<IActionResult> RunUpdateCurveDistribution(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "curveDistribution/{id}/update/")] HttpRequest req , string id)
         {

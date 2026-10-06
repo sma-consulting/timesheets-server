@@ -15,6 +15,7 @@ namespace sma.plan
 		string GetCurrentEmail();
 		bool IsCurrentUserAdmin();
 		string GetCurrentTeamMemberId();
+		string GetCurrentUserId();
 
 	}
 }

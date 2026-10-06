@@ -68,6 +68,20 @@ namespace sma.plan {
 			return _teamMemberRepo.GetByUserId(user.Id)?.Id;
 		}
 
+		// The caller's User - the login itself, which an admin always has even
+		// without a TeamMember. Null when nobody can be identified.
+		public string GetCurrentUserId()
+		{
+			var email = GetCurrentEmail();
+
+			if (string.IsNullOrWhiteSpace(email))
+			{
+				return null;
+			}
+
+			return _userRepo.GetByEmail(email.Trim())?.Id;
+		}
+
 		// Admin is a flag on the User record, resolved from whoever the current
 		// request belongs to. Returns false when nobody can be identified.
 		public bool IsCurrentUserAdmin()

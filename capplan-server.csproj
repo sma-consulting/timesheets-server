@@ -1,8 +1,13 @@
 <!-- Isolated worker model: the functions run in their own .NET process
-     rather than inside the Functions host. -->
-<Project Sdk="Azure.Functions.Sdk/1.0.0">
+     rather than inside the Functions host. Uses the classic worker tooling
+     (Microsoft.NET.Sdk + Microsoft.Azure.Functions.Worker.Sdk) rather than the
+     newer Azure.Functions.Sdk, whose 1.0.x publish step needs a ZipDeploy
+     option the current .NET SDK (10.0.401) doesn't have, so Visual Studio's
+     Publish failed with it. -->
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <AzureFunctionsVersion>v4</AzureFunctionsVersion>
     <RootNamespace>sma.plan</RootNamespace>
     <GitVersion>false</GitVersion>
     <OutputType>Exe</OutputType>
@@ -17,6 +22,7 @@
     <!-- Keeps API responses serialized exactly as they were in-process. -->
     <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.12" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.1.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
     <PackageReference Include="MongoDB.Bson" Version="2.19.2" />

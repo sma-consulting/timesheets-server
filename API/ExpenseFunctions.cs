@@ -23,6 +23,7 @@ namespace sma.plan
 		private readonly IProjectTaskRepo _taskRepo;
 		private readonly IProjectService _projectService;
 		private readonly ISecurityService _securityService;
+		private readonly IInvoiceRepo _invoiceRepo;
 
 		public ExpenseFunctions(
 			IExpenseRepo expenseRepo,
@@ -30,7 +31,8 @@ namespace sma.plan
 			IProjectRepo projectRepo,
 			IProjectTaskRepo taskRepo,
 			IProjectService projectService,
-			ISecurityService securityService)
+			ISecurityService securityService,
+			IInvoiceRepo invoiceRepo)
 		{
 			_expenseRepo = expenseRepo;
 			_receiptRepo = receiptRepo;
@@ -38,6 +40,7 @@ namespace sma.plan
 			_taskRepo = taskRepo;
 			_projectService = projectService;
 			_securityService = securityService;
+			_invoiceRepo = invoiceRepo;
 		}
 
 
@@ -277,6 +280,18 @@ namespace sma.plan
 			if (expense.Reimbursed)
 			{
 				return Invalid("This expense has been reimbursed and can't be reviewed again.");
+			}
+
+			// Approval is what locks an expense, so an expense billed on an issued
+			// invoice can't be sent back to review - the invoice must keep matching
+			// what it billed. Cancelling the invoice unlocks it, as for time.
+			Invoice billedOn = _invoiceRepo.IssuedInvoiceBillingExpense(id);
+			if (billedOn != null)
+			{
+				return Invalid(string.Format(
+					"This expense was billed on invoice {0} ({1}), so it can't be changed. To change it, cancel the invoice first.",
+					billedOn.Number,
+					billedOn.Month.ToString("MMMM yyyy", CultureInfo.InvariantCulture)));
 			}
 
 			ReviewRequest review = JsonConvert.DeserializeObject<ReviewRequest>(

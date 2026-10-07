@@ -9,6 +9,8 @@ namespace sma.plan
 		Invoice Delete(string id);
 		Invoice Get(string id);
 		Invoice Find(string id);
+		Invoice IssuedInvoiceBilling(string timeEntryId);
+		Invoice IssuedInvoiceBillingExpense(string expenseId);
 		List<Invoice> GetAll();
 		Tuple<Invoice, Invoice> Update(Invoice data);
 	}

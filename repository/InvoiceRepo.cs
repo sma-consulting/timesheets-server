@@ -72,5 +72,33 @@ namespace sma.plan
 			}
 			return DBCollection.Find(i => i.Id == id).FirstOrDefault();
 		}
+
+		// The issued, not cancelled invoice that billed a time entry, if any.
+		public Invoice IssuedInvoiceBilling(string timeEntryId)
+		{
+			if (!ObjectId.TryParse(timeEntryId, out _))
+			{
+				return null;
+			}
+
+			var filter = Builders<Invoice>.Filter.Eq(i => i.Issued, true)
+				& Builders<Invoice>.Filter.Eq(i => i.Cancelled, false)
+				& Builders<Invoice>.Filter.ElemMatch(i => i.TimeEntries, e => e.TimeEntryId == timeEntryId);
+			return DBCollection.Find(filter).FirstOrDefault();
+		}
+
+		// The issued, not cancelled invoice that bills an expense, if any.
+		public Invoice IssuedInvoiceBillingExpense(string expenseId)
+		{
+			if (string.IsNullOrWhiteSpace(expenseId))
+			{
+				return null;
+			}
+
+			var filter = Builders<Invoice>.Filter.Eq(i => i.Issued, true)
+				& Builders<Invoice>.Filter.Eq(i => i.Cancelled, false)
+				& Builders<Invoice>.Filter.ElemMatch(i => i.Lines, l => l.ExpenseId == expenseId);
+			return DBCollection.Find(filter).FirstOrDefault();
+		}
 	}
 }

@@ -23,5 +23,6 @@ namespace sma.plan
 		bool MayRead(string timeEntryId);
 		string Validate(TimeEntry timeEntry);
 		string OwnerFor(TimeEntry timeEntry);
+		string LockedReason(string timeEntryId, TimeEntry changed = null);
 	}
 }

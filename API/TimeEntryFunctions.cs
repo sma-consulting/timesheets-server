@@ -60,6 +60,12 @@ namespace sma.plan
 				return NotYours();
 			}
 
+			string locked = _timeEntryService.LockedReason(id);
+			if (locked != null)
+			{
+				return Invalid(locked);
+			}
+
 			return Ok(
 				() => _timeEntryService.Delete(id),
 				(t) => new
@@ -108,6 +114,13 @@ namespace sma.plan
 			if (invalid != null)
 			{
 				return Invalid(invalid);
+			}
+
+			// After Validate, so the entry compared is the one that would be saved.
+			string locked = _timeEntryService.LockedReason(id, timeEntry);
+			if (locked != null)
+			{
+				return Invalid(locked);
 			}
 
 			if (!_timeEntryService.MayLogAgainst(

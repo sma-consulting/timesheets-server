@@ -14,6 +14,7 @@ namespace sma.plan
 		private IProjectSubTaskRepo _subTaskRepo;
 		private IProjectTaskRepo _taskRepo;
 		private IProjectService _projectService;
+		private IInvoiceRepo _invoiceRepo;
 
 		public TimeEntryService(
 			ITimeEntryRepo repo,
@@ -21,7 +22,8 @@ namespace sma.plan
 			IProjectAssignmentRepo assignmentRepo,
 			IProjectSubTaskRepo subTaskRepo,
 			IProjectTaskRepo taskRepo,
-			IProjectService projectService)
+			IProjectService projectService,
+			IInvoiceRepo invoiceRepo)
 		{
 			_repo = repo;
 			_securityService = securityService;
@@ -29,6 +31,42 @@ namespace sma.plan
 			_subTaskRepo = subTaskRepo;
 			_taskRepo = taskRepo;
 			_projectService = projectService;
+			_invoiceRepo = invoiceRepo;
+		}
+
+		// Time billed on an issued invoice is locked - for admins too - so the
+		// invoice always matches the hours behind it. Returns why, or null when
+		// the entry may change. Cancelling the invoice unlocks it.
+		//
+		// `changed` is the entry as an update would save it. A save that changes
+		// nothing a person edits goes through: the Week grid saves a cell every
+		// time it's left, edited or not.
+		public string LockedReason(string timeEntryId, TimeEntry changed = null)
+		{
+			Invoice invoice = _invoiceRepo.IssuedInvoiceBilling(timeEntryId);
+			if (invoice == null)
+			{
+				return null;
+			}
+
+			if (changed != null)
+			{
+				TimeEntry existing = _repo.Get(timeEntryId);
+				if (existing != null
+					&& existing.ProjectSubTaskId == changed.ProjectSubTaskId
+					&& existing.TeamMemberId == OwnerFor(changed)
+					&& existing.Date == changed.Date
+					&& existing.Hours == changed.Hours
+					&& (existing.Notes ?? "") == (changed.Notes ?? ""))
+				{
+					return null;
+				}
+			}
+
+			return string.Format(
+				"This time was billed on invoice {0} ({1}), so it can't be changed. To change it, cancel the invoice first.",
+				invoice.Number,
+				invoice.Month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture));
 		}
 
 		// Assignment is project-level: being put on a project lets you book time

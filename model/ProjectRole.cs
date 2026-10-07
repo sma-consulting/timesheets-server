@@ -6,10 +6,14 @@ using System.Threading.Tasks;
 
 namespace sma.plan
 {
+	// A kind of work, e.g. "Senior Developer". Global: one row is shared by every
+	// project. Who holds a role on a given project is recorded on
+	// ProjectAssignment, not here.
 	internal class ProjectRole : GeneralModel
 	{
-		public string Name { get; set; }
+		// Optional short reference, e.g. "SDEV".
+		public string Code { get; set; }
 
-		public List<string> Assignees { get; set; } = new List<string>();
+		public string Name { get; set; }
 	}
 }

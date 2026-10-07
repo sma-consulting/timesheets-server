@@ -13,5 +13,6 @@ namespace sma.plan
 		TeamMember Get(string id);
 		List<TeamMember> GetAll();
 		Tuple<TeamMember, TeamMember> Update(TeamMember data);
+		TeamMember GetByUserId(string userId);
 	}
 }

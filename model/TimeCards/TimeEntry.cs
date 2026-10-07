@@ -31,12 +31,18 @@ namespace sma.plan
 
 		public decimal Hours { get; set; }
 
+		public string Notes { get; set; }
+
 		public bool Billable { get; set; }
 
 		public DateTime? LastModified { get; set; }
 
 		public string ModifiedBy { get; set; }
 
+		// Earlier versions of this entry, oldest first. Kept by the server only:
+		// TimeEntryService carries it across updates, so a client can't write or
+		// erase it. Snapshots have none of their own, hence IgnoreIfNull.
+		[BsonIgnoreIfNull]
 		public List<TimeEntry> History { get; set; } = new List<TimeEntry>();
 
 		//Get a clone of data for History, omitting the audit log itself
@@ -51,11 +57,29 @@ namespace sma.plan
 				TeamMemberId = this.TeamMemberId,
 				Date = this.Date,
 				Hours = this.Hours,
+				Notes = this.Notes,
 				Billable = this.Billable,
 				LastModified = this.LastModified,
 				ModifiedBy = this.ModifiedBy,
 				History = null,
 			};
+		}
+
+		// Whether the parts a person can change are the same - not the audit
+		// fields. An unchanged save (the week grid saves on every blur) shouldn't
+		// add a history item.
+		public bool SameAs(TimeEntry other)
+		{
+			return other != null
+				&& CustomerId == other.CustomerId
+				&& ProjectId == other.ProjectId
+				&& ProjectTaskId == other.ProjectTaskId
+				&& ProjectSubTaskId == other.ProjectSubTaskId
+				&& TeamMemberId == other.TeamMemberId
+				&& Date == other.Date
+				&& Hours == other.Hours
+				&& (Notes ?? "") == (other.Notes ?? "")
+				&& Billable == other.Billable;
 		}
 	}
 }

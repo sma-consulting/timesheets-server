@@ -29,20 +29,53 @@ namespace sma.plan
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string CreatedBy { get; set; }
 
-		// Sent to the customer. From then on it can't be changed or deleted.
+		// Sent to the customer. From then on it can't be changed or deleted, and
+		// the expenses it bills are marked invoiced.
 		public bool Issued { get; set; }
 
-		// Withdrawn. Kept on record with its number, and its month is free for a
-		// new invoice.
+		public DateTime? IssuedAt { get; set; }
+
+		// The User who issued it.
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string IssuedBy { get; set; }
+
+		// Withdrawn after it was issued. Kept on record with its number, its
+		// expenses are free to bill again, and its month is free for a new
+		// invoice.
 		public bool Cancelled { get; set; }
+
+		public DateTime? CancelledAt { get; set; }
+
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string CancelledBy { get; set; }
+
+		// Payment received, recorded on an issued invoice.
+		public bool Paid { get; set; }
+
+		public DateOnly? PaymentDate { get; set; }
 
 		public List<InvoiceApproval> Approvals { get; set; } = new List<InvoiceApproval>();
 
 		// The month's time entries on the project, copied in on each save while
-		// the invoice is a draft - what it bills, as it was when billed.
+		// the invoice is a draft - what it bills, as it was when billed. Once
+		// issued, these entries can't be changed until the invoice is cancelled.
 		public List<UserTimeEntry> TimeEntries { get; set; } = new List<UserTimeEntry>();
 
+		// What priced and grouped those hours, copied when the invoice is issued:
+		// the project's assignments (each person's role), billing rates, tasks
+		// and sub-tasks. With them the invoice's hours report shows exactly what
+		// was billed, whatever changes on the project later. Empty on a draft.
+		public List<ProjectAssignment> BilledAssignments { get; set; } = new List<ProjectAssignment>();
+
+		public List<ProjectBillingRate> BilledRates { get; set; } = new List<ProjectBillingRate>();
+
+		public List<ProjectTask> BilledTasks { get; set; } = new List<ProjectTask>();
+
+		public List<ProjectSubTask> BilledSubTasks { get; set; } = new List<ProjectSubTask>();
+
 		// The document itself, as on the page and the PDF.
+
+		// Always the last day of Month; the server sets it on every save.
 		public DateOnly? InvoiceDate { get; set; }
 
 		// Days after the invoice date it's due (Net 30); null when the due date

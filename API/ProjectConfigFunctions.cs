@@ -215,6 +215,11 @@ namespace sma.plan
                 return "The end date can't be before the start date.";
             }
 
+            if (project.DisbursementRate < 0 || project.DisbursementRate > 100)
+            {
+                return "The disbursement rate must be between 0 and 100%.";
+            }
+
             project.Name = project.Name?.Trim();
             project.FundingCode = project.FundingCode?.Trim();
             project.Division = project.Division?.Trim();

@@ -49,6 +49,10 @@ namespace sma.plan
 
 		public decimal TotalBudget { get; set; }
 
+		// The flat disbursement's percentage of an invoice's fees (3 for 3%).
+		// Null means the standard rate; 0 means no disbursement.
+		public decimal? DisbursementRate { get; set; }
+
 		// Derived from ProjectType on every save (false only for NonBillable), so
 		// the two can't disagree.
 		public bool Billable { get; set; } = true;

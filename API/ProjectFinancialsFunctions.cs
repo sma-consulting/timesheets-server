@@ -10,45 +10,74 @@ using System.Threading.Tasks;
 
 namespace sma.plan
 {
-	// Projects' financials, for admins only: the budget's parts as in Access's
-	// qryBudget, and the disbursement rate invoices are built with. The page
-	// sends the parts; the server checks them and works out every total, so
-	// what's stored always adds up.
+	// Projects' financials: the budget's parts as in Access's qryBudget, and the
+	// disbursement rate invoices are built with. Admins set them; a project's
+	// manager may look at their own projects'. The page sends the parts; the
+	// server checks them and works out every total, so what's stored always
+	// adds up.
 	internal class ProjectFinancialsFunctions : RequestHandler
 	{
 		private readonly IProjectFinancialsRepo _financialsRepo;
 		private readonly IProjectRepo _projectRepo;
+		private readonly IExpenseRepo _expenseRepo;
+		private readonly IProjectService _projectService;
 		private readonly ISecurityService _securityService;
 
 		public ProjectFinancialsFunctions(
 			IProjectFinancialsRepo financialsRepo,
 			IProjectRepo projectRepo,
+			IExpenseRepo expenseRepo,
+			IProjectService projectService,
 			ISecurityService securityService)
 		{
 			_financialsRepo = financialsRepo;
 			_projectRepo = projectRepo;
+			_expenseRepo = expenseRepo;
+			_projectService = projectService;
 			_securityService = securityService;
 		}
 
-		// Every project's financials that has any. A project without is simply
-		// left out - it has no budget yet.
-		[Allow(Role.Admin)]
+		// Every project's financials that has any - all of them for an admin,
+		// just their own projects' for a project manager, none for anyone else.
+		// A project without is simply left out: it has no budget yet.
+		//
+		// With them, each project's approved billable expenses not yet invoiced:
+		// part of what it has to bill, which a manager can't add up for
+		// themselves, as other people's expenses aren't theirs to read.
+		[Allow(Role.SignedIn)]
 		[Function("GetAllProjectFinancials")]
 		public async Task<IActionResult> RunGetAllProjectFinancials(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectFinancials/")] HttpRequest req)
 		{
+			bool admin = _securityService.IsCurrentUserAdmin();
+			HashSet<string> managed = admin ? null : _projectService.ManagedProjectIds();
+			bool Visible(string projectId) => admin || managed.Contains(projectId ?? "");
+
 			return Ok(
 				() =>
 				{
-					// Financials still on project documents from before they had
-					// their own are copied across first.
-					_financialsRepo.EnsureAllFromLegacy();
-					return _financialsRepo.GetAll();
+					if (admin)
+					{
+						// Financials still on project documents from before they had
+						// their own are copied across first.
+						_financialsRepo.EnsureAllFromLegacy();
+					}
+					return new
+					{
+						financialsList = _financialsRepo.GetAll().Where(f => Visible(f.ProjectId)).ToList(),
+						uninvoicedExpenseList = _expenseRepo.GetAll()
+							.Where(e => e.Status == Expense.StatusApproved && e.Billable && !e.Invoiced && Visible(e.ProjectId))
+							.GroupBy(e => e.ProjectId)
+							.Select(g => new
+							{
+								projectId = g.Key,
+								amount = g.Sum(e => e.Amount),
+								count = g.Count(),
+							})
+							.ToList(),
+					};
 				},
-				(f) => new
-				{
-					financialsList = f
-				});
+				(r) => r);
 		}
 
 		// Creates or replaces a project's financials.

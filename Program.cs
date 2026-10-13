@@ -96,4 +96,23 @@ if (missing.Count > 0)
 			string.Join(", ", missing));
 }
 
+// Marks time billed on invoices issued before time entries said whether they
+// were invoiced. In the background, so startup isn't held up; it does nothing
+// once everything is marked.
+_ = Task.Run(() =>
+{
+	try
+	{
+		InvoicedTimeSync.Run(
+			host.Services.GetRequiredService<IInvoiceRepo>(),
+			host.Services.GetRequiredService<ITimeEntryRepo>());
+	}
+	catch (Exception ex)
+	{
+		host.Services.GetRequiredService<ILoggerFactory>()
+			.CreateLogger("InvoicedTimeSync")
+			.LogWarning(ex, "Couldn't mark the time billed on earlier invoices as invoiced.");
+	}
+});
+
 host.Run();

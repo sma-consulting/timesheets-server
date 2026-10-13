@@ -39,6 +39,16 @@ namespace sma.plan
 
 		public string ModifiedBy { get; set; }
 
+		// Billed on an issued invoice, and which one: set when the invoice is
+		// issued, cleared if it's cancelled. The invoice's own list of what it
+		// billed is the record; this is a copy on the entry, for finding time
+		// not yet invoiced and for showing it. Kept by the server only, like
+		// History: an update carries it over, whatever the client sends.
+		public bool Invoiced { get; set; }
+
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string InvoiceId { get; set; }
+
 		// Earlier versions of this entry, oldest first. Kept by the server only:
 		// TimeEntryService carries it across updates, so a client can't write or
 		// erase it. Snapshots have none of their own, hence IgnoreIfNull.

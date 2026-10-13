@@ -10,8 +10,10 @@ using System.Threading.Tasks;
 
 namespace sma.plan
 {
-	// Admin-only, reads included: billing rates are commercially sensitive and only
-	// admins set them.
+	// Billing rates are commercially sensitive: only admins set them, and only
+	// admins read them - except a project's manager, who may read their own
+	// projects' rates. They see them on those projects' invoices anyway, and
+	// need them for the project's time not yet invoiced.
 	//
 	// For each project + role the rates form one unbroken timeline - no overlaps,
 	// no gaps, only the latest open-ended - so every day from the first rate on
@@ -21,33 +23,36 @@ namespace sma.plan
 	{
 		private readonly IProjectBillingRateRepo _rateRepo;
 		private readonly IProjectRepo _projectRepo;
+		private readonly IProjectService _projectService;
 		private readonly ISecurityService _securityService;
 		private readonly DatabaseRepo<ProjectRole> _roleRepo = new DatabaseRepo<ProjectRole>();
 
 		public ProjectBillingRateFunctions(
 			IProjectBillingRateRepo rateRepo,
 			IProjectRepo projectRepo,
+			IProjectService projectService,
 			ISecurityService securityService)
 		{
 			_rateRepo = rateRepo;
 			_projectRepo = projectRepo;
+			_projectService = projectService;
 			_securityService = securityService;
 		}
 
-		[Allow(Role.Admin)]
+		[Allow(Role.SignedIn)]
 		[Function("GetProjectBillingRates")]
 		public async Task<IActionResult> RunGetProjectBillingRates(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projectBillingRate/")] HttpRequest req)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			string projectId = req.Query["projectId"];
 			if (string.IsNullOrWhiteSpace(projectId))
 			{
 				return Invalid("A projectId is required.");
+			}
+
+			if (!_securityService.IsCurrentUserAdmin() && !_projectService.ManagedProjectIds().Contains(projectId))
+			{
+				return Forbidden();
 			}
 
 			return Ok(

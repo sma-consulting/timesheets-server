@@ -291,6 +291,9 @@ namespace sma.plan
 				{
 					Invoice issued = _invoiceRepo.Update(stored).Item2;
 					MarkExpensesInvoiced(issued, true);
+					_timeEntryRepo.MarkInvoiced(
+						(issued.TimeEntries ?? new List<UserTimeEntry>()).Select(e => e.TimeEntryId),
+						issued.Id);
 					return issued;
 				},
 				(i) => new
@@ -335,6 +338,7 @@ namespace sma.plan
 				{
 					Invoice cancelled = _invoiceRepo.Update(stored).Item2;
 					MarkExpensesInvoiced(cancelled, false);
+					_timeEntryRepo.ClearInvoiced(cancelled.Id);
 					return cancelled;
 				},
 				(i) => new

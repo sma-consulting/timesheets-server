@@ -210,6 +210,9 @@ namespace sma.plan
 			timeEntry.History = new List<TimeEntry>();
 			timeEntry.LastModified = DateTime.UtcNow;
 			timeEntry.ModifiedBy = _securityService.GetCurrentTeamMemberId();
+			// Only issuing an invoice marks time invoiced.
+			timeEntry.Invoiced = false;
+			timeEntry.InvoiceId = null;
 			return _repo.Create(timeEntry);
 		}
 
@@ -225,6 +228,8 @@ namespace sma.plan
 			timeEntry.History = existing.History ?? new List<TimeEntry>();
 			timeEntry.LastModified = existing.LastModified;
 			timeEntry.ModifiedBy = existing.ModifiedBy;
+			timeEntry.Invoiced = existing.Invoiced;
+			timeEntry.InvoiceId = existing.InvoiceId;
 
 			if (!timeEntry.SameAs(existing))
 			{

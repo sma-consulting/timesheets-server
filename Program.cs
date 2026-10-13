@@ -40,6 +40,7 @@ var host = new HostBuilder()
 		services.AddSingleton<IExpenseRepo, ExpenseRepo>();
 		services.AddSingleton<IExpenseReceiptRepo, ExpenseReceiptRepo>();
 		services.AddSingleton<IInvoiceRepo, InvoiceRepo>();
+		services.AddSingleton<IProjectFinancialsRepo, ProjectFinancialsRepo>();
 
 		// Receipt files. Locally a connection string (Azurite) or the storage
 		// URL with your own Azure login; in Azure the account URL plus the

@@ -22,6 +22,7 @@ namespace sma.plan
         private readonly ISecurityService _securityService;
         private readonly IProjectAssignmentRepo _assignmentRepo;
         private readonly ITeamMemberRepo _teamMemberRepo;
+        private readonly IProjectFinancialsRepo _financialsRepo;
         private readonly DatabaseRepo<ProjectRole> _roleRepo = new DatabaseRepo<ProjectRole>();
         private readonly ILogger<ProjectConfigFunctions> _logger;
 
@@ -30,12 +31,14 @@ namespace sma.plan
             ISecurityService securityService,
             IProjectAssignmentRepo assignmentRepo,
             ITeamMemberRepo teamMemberRepo,
+            IProjectFinancialsRepo financialsRepo,
             ILogger<ProjectConfigFunctions> logger)
         {
             _projectService = projectService;
             _securityService = securityService;
             _assignmentRepo = assignmentRepo;
             _teamMemberRepo = teamMemberRepo;
+            _financialsRepo = financialsRepo;
             _logger = logger;
         }
 
@@ -83,7 +86,13 @@ namespace sma.plan
             }
 
             return Ok(
-                () => (new DatabaseRepo<Project>()).Delete(id),
+                () =>
+                {
+                    Project deleted = (new DatabaseRepo<Project>()).Delete(id);
+                    // Its financials go with it.
+                    _financialsRepo.DeleteByProject(id);
+                    return deleted;
+                },
                 (p) => new
                 {
                     deletedProject = p
@@ -133,6 +142,10 @@ namespace sma.plan
             return Ok(
                 () =>
                 {
+                    // Saving replaces the whole project document, which would drop
+                    // financials still kept on it from before they had their own -
+                    // so they're copied across first.
+                    _financialsRepo.EnsureFromLegacy(id);
                     Project updated = _projectService.Update(project);
                     AddManagerToTeam(project);
                     return updated;
@@ -215,9 +228,10 @@ namespace sma.plan
                 return "The end date can't be before the start date.";
             }
 
-            if (project.DisbursementRate < 0 || project.DisbursementRate > 100)
+            project.Status = string.IsNullOrWhiteSpace(project.Status) ? null : project.Status.Trim();
+            if (project.Status != null && !Project.Statuses.Contains(project.Status))
             {
-                return "The disbursement rate must be between 0 and 100%.";
+                return "Status must be In process, Finished, Cancelled or SMA.";
             }
 
             project.Name = project.Name?.Trim();

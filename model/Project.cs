@@ -18,6 +18,14 @@ namespace sma.plan
 
 		public static readonly string[] ProjectTypes = { TypeHourly, TypeLumpSum, TypeNonBillable };
 
+		// Where the project stands, as in SMA's Access database (tblJob.Status).
+		public const string StatusInProcess = "In process";
+		public const string StatusFinished = "Finished";
+		public const string StatusCancelled = "Cancelled";
+		public const string StatusSma = "SMA";
+
+		public static readonly string[] Statuses = { StatusInProcess, StatusFinished, StatusCancelled, StatusSma };
+
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string CustomerId { get; set; }
 
@@ -47,11 +55,11 @@ namespace sma.plan
         [BsonRepresentation(BsonType.ObjectId)]
 		public string ProjectManagerId { get; set; }
 
-		public decimal TotalBudget { get; set; }
+		// One of Statuses; null on projects saved before there was a status.
+		public string Status { get; set; }
 
-		// The flat disbursement's percentage of an invoice's fees (3 for 3%).
-		// Null means the standard rate; 0 means no disbursement.
-		public decimal? DisbursementRate { get; set; }
+		// The project's budget, disbursement rate and the rest of its financials
+		// are in ProjectFinancials: admins only, and saved on their own.
 
 		// Derived from ProjectType on every save (false only for NonBillable), so
 		// the two can't disagree.

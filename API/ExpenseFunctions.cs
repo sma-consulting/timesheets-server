@@ -216,6 +216,7 @@ namespace sma.plan
 					existing.Notes = changes.Notes;
 					existing.Amount = changes.Amount;
 					existing.Billable = changes.Billable;
+					existing.Reimbursable = changes.Reimbursable;
 
 					if (!admin)
 					{
@@ -392,7 +393,9 @@ namespace sma.plan
 
 			bool admin = _securityService.IsCurrentUserAdmin();
 			bool mine = expense.TeamMemberId == _securityService.GetCurrentTeamMemberId();
-			if (!admin && !mine)
+			// A project manager opens the receipts on their projects' invoices.
+			bool manager = !admin && !mine && _projectService.ManagedProjectIds().Contains(expense.ProjectId);
+			if (!admin && !mine && !manager)
 			{
 				return Forbidden("That expense belongs to someone else.");
 			}
@@ -469,6 +472,9 @@ namespace sma.plan
 			expense.Amount = amount;
 
 			expense.Billable = string.Equals(form["billable"], "true", StringComparison.OrdinalIgnoreCase);
+			// Paid back unless it says otherwise: most claims are someone's own
+			// money.
+			expense.Reimbursable = !string.Equals(form["reimbursable"], "false", StringComparison.OrdinalIgnoreCase);
 			return null;
 		}
 

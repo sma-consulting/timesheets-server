@@ -55,6 +55,13 @@ namespace sma.plan
 
 		public bool Billable { get; set; }
 
+		// Paid by the claimant, so paid back in a reimbursement batch. Off for
+		// something SMA paid for directly (a company card): it's still recorded
+		// against the project, but there's nobody to pay back. Expenses from
+		// before there was a choice were all paid by their claimant.
+		[BsonDefaultValue(true)]
+		public bool Reimbursable { get; set; } = true;
+
 		public string Status { get; set; } = StatusSubmitted;
 
 		public DateTime SubmittedAt { get; set; }
@@ -77,9 +84,18 @@ namespace sma.plan
 
 		public string ReceiptContentType { get; set; }
 
-		// Set by the invoice and reimbursement steps, which aren't built yet.
+		// Set when an issued invoice bills it; cleared if that invoice is
+		// cancelled.
 		public bool Invoiced { get; set; }
 
+		// Set when the reimbursement batch that pays it back is filed; cleared
+		// if that batch is voided. Only ever on a reimbursable, approved expense,
+		// and approval keeps it locked.
 		public bool Reimbursed { get; set; }
+
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string ReimbursementBatchId { get; set; }
+
+		public DateTime? ReimbursedAt { get; set; }
 	}
 }

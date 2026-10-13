@@ -11,9 +11,11 @@ using System.Threading.Tasks;
 
 namespace sma.plan
 {
-	// Invoices, for admins only. The page sends the invoice as edited; the
-	// server alone sets its number, who created it and when, its status, and the
-	// time entries it bills, whatever the request says.
+	// Invoices, made and changed by admins. A project manager may look at the
+	// issued ones on the projects they manage, but not change them. The page
+	// sends the invoice as edited; the server alone sets its number, who
+	// created it and when, its status, and the time entries it bills, whatever
+	// the request says.
 	internal class InvoiceFunctions : RequestHandler
 	{
 		private readonly IInvoiceRepo _invoiceRepo;
@@ -24,6 +26,7 @@ namespace sma.plan
 		private readonly IProjectBillingRateRepo _rateRepo;
 		private readonly IProjectTaskRepo _taskRepo;
 		private readonly IProjectSubTaskRepo _subTaskRepo;
+		private readonly IProjectService _projectService;
 		private readonly ISecurityService _securityService;
 
 		public InvoiceFunctions(
@@ -35,6 +38,7 @@ namespace sma.plan
 			IProjectBillingRateRepo rateRepo,
 			IProjectTaskRepo taskRepo,
 			IProjectSubTaskRepo subTaskRepo,
+			IProjectService projectService,
 			ISecurityService securityService)
 		{
 			_invoiceRepo = invoiceRepo;
@@ -45,6 +49,7 @@ namespace sma.plan
 			_rateRepo = rateRepo;
 			_taskRepo = taskRepo;
 			_subTaskRepo = subTaskRepo;
+			_projectService = projectService;
 			_securityService = securityService;
 		}
 
@@ -105,13 +110,31 @@ namespace sma.plan
 		}
 
 
-		[Allow(Role.Admin)]
+		// Any invoice for an admin; for a project manager, an issued one on a
+		// project they manage.
+		[Allow(Role.SignedIn)]
 		[Function("GetInvoice")]
 		public async Task<IActionResult> RunGetInvoice(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "invoice/{id}/")] HttpRequest req, string id)
 		{
+			if (_securityService.IsCurrentUserAdmin())
+			{
+				return Ok(
+					() => _invoiceRepo.Get(id),
+					(i) => new
+					{
+						invoice = i
+					});
+			}
+
+			Invoice stored = _invoiceRepo.Find(id);
+			if (stored == null || !stored.Issued || !_projectService.ManagedProjectIds().Contains(stored.ProjectId))
+			{
+				return Forbidden("That invoice isn't on a project you manage.");
+			}
+
 			return Ok(
-				() => _invoiceRepo.Get(id),
+				() => WithBilledCopies(new List<Invoice> { stored })[0],
 				(i) => new
 				{
 					invoice = i
@@ -119,13 +142,29 @@ namespace sma.plan
 		}
 
 
-		[Allow(Role.Admin)]
+		// Every invoice for an admin. A project manager gets the issued ones -
+		// sent, paid or cancelled, never drafts - on the projects they manage;
+		// anyone else, none.
+		[Allow(Role.SignedIn)]
 		[Function("GetAllInvoice")]
 		public async Task<IActionResult> RunGetAllInvoice(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "invoice/")] HttpRequest req)
 		{
+			if (_securityService.IsCurrentUserAdmin())
+			{
+				return Ok(
+					() => _invoiceRepo.GetAll(),
+					(i) => new
+					{
+						invoiceList = i
+					});
+			}
+
+			HashSet<string> managed = _projectService.ManagedProjectIds();
 			return Ok(
-				() => _invoiceRepo.GetAll(),
+				() => WithBilledCopies(_invoiceRepo.GetAll()
+					.Where(i => i.Issued && managed.Contains(i.ProjectId))
+					.ToList()),
 				(i) => new
 				{
 					invoiceList = i
@@ -245,6 +284,7 @@ namespace sma.plan
 			stored.IssuedBy = _securityService.GetCurrentUserId();
 			stored.TimeEntries = TimeEntriesFor(stored);
 			CopyBilledProject(stored);
+			CopyBilledExpenses(stored, _expenseRepo.GetAll());
 
 			return Ok(
 				() =>
@@ -354,14 +394,20 @@ namespace sma.plan
 			public DateOnly? PaymentDate { get; set; }
 		}
 
+		// The ids of the expenses an invoice bills.
+		private static HashSet<string> ExpenseIdsOf(Invoice invoice)
+		{
+			return (invoice.Lines ?? new List<InvoiceLine>())
+				.Select(l => l.ExpenseId)
+				.Where(e => !string.IsNullOrWhiteSpace(e))
+				.ToHashSet();
+		}
+
 		// Marks the expenses an invoice bills as invoiced (when it's issued) or
 		// frees them again (when it's cancelled). Ones deleted since are skipped.
 		private void MarkExpensesInvoiced(Invoice invoice, bool invoiced)
 		{
-			HashSet<string> ids = (invoice.Lines ?? new List<InvoiceLine>())
-				.Select(l => l.ExpenseId)
-				.Where(e => !string.IsNullOrWhiteSpace(e))
-				.ToHashSet();
+			HashSet<string> ids = ExpenseIdsOf(invoice);
 			if (ids.Count == 0)
 			{
 				return;
@@ -454,6 +500,15 @@ namespace sma.plan
 				.ToList();
 		}
 
+		// Copies the expenses the invoice bills, as they are at issue.
+		private static void CopyBilledExpenses(Invoice invoice, IEnumerable<Expense> expenses)
+		{
+			HashSet<string> ids = ExpenseIdsOf(invoice);
+			invoice.BilledExpenses = ids.Count == 0
+				? new List<Expense>()
+				: expenses.Where(e => ids.Contains(e.Id)).ToList();
+		}
+
 		// A draft has none: its report is built from the project as it is now.
 		private static void ClearBilledProject(Invoice invoice)
 		{
@@ -461,6 +516,29 @@ namespace sma.plan
 			invoice.BilledRates = new List<ProjectBillingRate>();
 			invoice.BilledTasks = new List<ProjectTask>();
 			invoice.BilledSubTasks = new List<ProjectSubTask>();
+			invoice.BilledExpenses = new List<Expense>();
+		}
+
+		// For a project manager, who can't read a project's rates or other
+		// people's expenses: invoices issued before the copies were kept get the
+		// missing ones from the project as it is now - what an admin's page
+		// falls back on too. Only on the way out; nothing is saved.
+		private List<Invoice> WithBilledCopies(List<Invoice> invoices)
+		{
+			List<Expense> expenses = null;
+			foreach (Invoice invoice in invoices)
+			{
+				if ((invoice.BilledAssignments?.Count ?? 0) == 0 && (invoice.BilledRates?.Count ?? 0) == 0)
+				{
+					CopyBilledProject(invoice);
+				}
+				if ((invoice.BilledExpenses?.Count ?? 0) == 0 && ExpenseIdsOf(invoice).Count > 0)
+				{
+					expenses ??= _expenseRepo.GetAll();
+					CopyBilledExpenses(invoice, expenses);
+				}
+			}
+			return invoices;
 		}
 
 		// An invoice's month is kept as its last day, whichever day was sent.

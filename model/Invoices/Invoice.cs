@@ -20,7 +20,7 @@ namespace sma.plan
 		public DateOnly Month { get; set; }
 
 		// Given by the server when the invoice is first saved: one past the
-		// highest so far, carrying on from SMA's own numbering (Sage's InvoiceID).
+		// highest so far, carrying on from SMA's own numbering (Access's InvoiceID).
 		public int Number { get; set; }
 
 		public DateTime CreatedAt { get; set; }
@@ -72,6 +72,11 @@ namespace sma.plan
 		public List<ProjectTask> BilledTasks { get; set; } = new List<ProjectTask>();
 
 		public List<ProjectSubTask> BilledSubTasks { get; set; } = new List<ProjectSubTask>();
+
+		// The expenses it bills, copied when it's issued. The expense report and
+		// its receipts come from these, so a project manager - who can't read
+		// other people's expenses - sees the invoice whole. Empty on a draft.
+		public List<Expense> BilledExpenses { get; set; } = new List<Expense>();
 
 		// The document itself, as on the page and the PDF.
 

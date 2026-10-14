@@ -1,5 +1,7 @@
+using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using MongoDB.Driver;
 using System;
 using System.IO;
 
@@ -58,11 +60,27 @@ namespace sma.plan
 			return deleted;
 		}
 
+		public ExpenseReceipt Find(string id)
+		{
+			return string.IsNullOrWhiteSpace(id)
+				? null
+				: DBCollection.Find(r => r.Id == id).FirstOrDefault();
+		}
+
 		public Stream OpenRead(ExpenseReceipt receipt)
 		{
 			if (!string.IsNullOrWhiteSpace(receipt.BlobName))
 			{
-				return _container.GetBlobClient(receipt.BlobName).OpenRead();
+				try
+				{
+					return _container.GetBlobClient(receipt.BlobName).OpenRead();
+				}
+				catch (RequestFailedException e) when (e.Status == 404)
+				{
+					// The record outlived its file (deleted from storage, or saved
+					// against other storage): treated as no receipt, not a crash.
+					return null;
+				}
 			}
 
 			// Saved before blob storage: the bytes are still on the document.

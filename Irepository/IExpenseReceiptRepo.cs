@@ -11,7 +11,10 @@ namespace sma.plan
 		// Removes the receipt and its file.
 		ExpenseReceipt Delete(string id);
 		ExpenseReceipt Get(string id);
-		// The receipt's file, for sending back to the browser.
+		// The receipt, or null if there's none with that id.
+		ExpenseReceipt Find(string id);
+		// The receipt's file, for sending back to the browser; null if the file
+		// is missing from storage.
 		Stream OpenRead(ExpenseReceipt receipt);
 	}
 }

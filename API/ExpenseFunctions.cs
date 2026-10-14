@@ -65,6 +65,27 @@ namespace sma.plan
 		}
 
 
+		// For the expense report: every expense for an admin; for a project
+		// manager, the expenses on the projects they manage (anyone's, to report
+		// on - not to change); for anyone else, none. The Expenses page keeps
+		// using GetExpenses, so managers still see only their own there.
+		[Allow(Role.SignedIn)]
+		[Function("GetReportExpenses")]
+		public async Task<IActionResult> RunGetReportExpenses(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "reportExpense/")] HttpRequest req)
+		{
+			if (_securityService.IsCurrentUserAdmin())
+			{
+				return Ok(() => _expenseRepo.GetAll(), (e) => new { expenseList = e });
+			}
+
+			var managed = _projectService.ManagedProjectIds();
+			return Ok(
+				() => _expenseRepo.GetAll().Where(e => managed.Contains(e.ProjectId ?? "")).ToList(),
+				(e) => new { expenseList = e });
+		}
+
+
 		[Allow(Role.SignedIn)]
 		[Function("CreateExpense")]
 		public async Task<IActionResult> RunCreateExpense(
@@ -400,7 +421,7 @@ namespace sma.plan
 				return Forbidden("That expense belongs to someone else.");
 			}
 
-			ExpenseReceipt receipt = _receiptRepo.Get(expense.ReceiptId);
+			ExpenseReceipt receipt = _receiptRepo.Find(expense.ReceiptId);
 			Stream file = receipt == null ? null : _receiptRepo.OpenRead(receipt);
 			if (file == null)
 			{

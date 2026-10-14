@@ -33,20 +33,15 @@ namespace sma.plan
 		// Saves a new invoice under the next number: one past the highest so far,
 		// or past LAST_INVOICE_NUMBER while that's higher. Two invoices saved at
 		// the same moment would pick the same number; the unique index turns the
-		// second away, and it takes the one after.
+		// second away, and it moves on to the one after.
 		public Invoice CreateNumbered(Invoice invoice)
 		{
 			int.TryParse(Environment.GetEnvironmentVariable(LastInvoiceNumberSetting), out int lastBeforeApp);
+			int next = Math.Max(HighestNumber(), lastBeforeApp) + 1;
 
 			for (int attempt = 1; ; attempt++)
 			{
-				int highest = DBCollection.Find(_ => true)
-					.Project(i => i.Number)
-					.ToList()
-					.DefaultIfEmpty(0)
-					.Max();
-
-				invoice.Number = Math.Max(highest, lastBeforeApp) + 1;
+				invoice.Number = next;
 				invoice.Id = null;
 
 				try
@@ -57,9 +52,27 @@ namespace sma.plan
 				catch (MongoWriteException ex)
 					when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey && attempt < NumberAttempts)
 				{
-					// Taken a moment ago by another save; try the next one.
+					// Taken a moment ago by another save: the one after it, never
+					// the same one again.
+					Console.WriteLine("Invoice number " + next + " is taken; trying the next.");
+					next = Math.Max(next, HighestNumber()) + 1;
 				}
 			}
+		}
+
+		// The highest invoice number so far; 0 with none. Read as plain documents
+		// ({ Number: 1 }) rather than through a LINQ projection, which the driver
+		// can send as an expression Cosmos doesn't evaluate as MongoDB does - on
+		// the sandbox new invoices kept clashing with a number already taken.
+		private int HighestNumber()
+		{
+			return DBCollection
+				.Find(FilterDefinition<Invoice>.Empty)
+				.Project<BsonDocument>(Builders<Invoice>.Projection.Include(i => i.Number).Exclude(i => i.Id))
+				.ToList()
+				.Select(d => d.TryGetValue(nameof(Invoice.Number), out BsonValue n) && n.IsNumeric ? n.ToInt32() : 0)
+				.DefaultIfEmpty(0)
+				.Max();
 		}
 
 		// Like Get, but null rather than an exception when there's no such invoice

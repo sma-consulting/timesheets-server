@@ -66,10 +66,14 @@ namespace sma.plan
 			{
 				return Invalid("Choose the batch date.");
 			}
-			// A day's grace, as for expenses: the server runs on UTC.
-			if (batchDate > DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1))
+			// A batch can be filed before its 15th, while its period is still
+			// running - anything approved for it afterwards goes in the next
+			// batch. But not for a period that hasn't started yet: its 15th can
+			// be at most a month away (with a day's grace, as the server runs on
+			// UTC).
+			if (batchDate > DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(1).AddDays(1))
 			{
-				return Invalid("The batch date can't be in the future.");
+				return Invalid("That period hasn't started yet.");
 			}
 
 			List<Expense> due = _expenseRepo.GetAll()

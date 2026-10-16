@@ -56,12 +56,18 @@ namespace sma.plan
 				return NotSignedIn();
 			}
 
+			// The sandbox's "Testing as" switch: whether the app shows it, and the
+			// role picked, which the admin flag then follows.
+			string testRole = _securityService.TestRole();
+
 			return Ok(
 				() => _userService.ResolveOrCreate(email),
 				(t) => new
 				{
 					teamMember = t,
-					isAdmin = _userService.IsAdmin(email)
+					isAdmin = testRole != null ? _securityService.IsCurrentUserAdmin() : _userService.IsAdmin(email),
+					roleSwitch = _securityService.RoleSwitchEnabled(),
+					testRole,
 				});
 		}
 
@@ -79,12 +85,18 @@ namespace sma.plan
 				return NotSignedIn();
 			}
 
+			// As in WhoAmI: the admin flag follows a "Testing as" role, so the
+			// page and the server agree after switching user in the dev login box.
+			string testRole = _securityService.TestRole();
+
 			return Ok(
 				() => _userService.ResolveOrCreate(login.Email),
 				(t) => new
 				{
 					teamMember = t,
-					isAdmin = _userService.IsAdmin(login.Email)
+					isAdmin = testRole != null ? testRole == SandboxRoles.Admin : _userService.IsAdmin(login.Email),
+					roleSwitch = _securityService.RoleSwitchEnabled(),
+					testRole,
 				});
 		}
 

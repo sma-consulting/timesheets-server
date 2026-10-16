@@ -26,6 +26,16 @@ namespace sma.plan {
 		public string Val { get; set; }
 	}
 
+	// Sandbox only: the roles a tester can pick in the app's "Testing as" menu.
+	internal static class SandboxRoles
+	{
+		public const string Employee = "employee";
+		public const string ProjectManager = "pm";
+		public const string Admin = "admin";
+
+		public static readonly string[] All = { Employee, ProjectManager, Admin };
+	}
+
 	internal class SecurityService : ISecurityService
 	{
 		private const string EmailUriClaim = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
@@ -86,19 +96,19 @@ namespace sma.plan {
 		// request belongs to. Returns false when nobody can be identified.
 		public bool IsCurrentUserAdmin()
 		{
-			return IsAdminEmail(GetCurrentEmail());
-		}
+			var email = GetCurrentEmail();
 
-		public bool IsAdmin(string principalHeader)
-		{
-			return IsAdminEmail(GetEmail(principalHeader));
-		}
-
-		private bool IsAdminEmail(string email)
-		{
 			if (string.IsNullOrWhiteSpace(email))
 			{
 				return false;
+			}
+
+			// Testing as another role on the sandbox: an admin only as "Admin",
+			// whatever the person really is.
+			string testRole = TestRole();
+			if (testRole != null)
+			{
+				return testRole == SandboxRoles.Admin;
 			}
 
 			User user = _userRepo.GetByEmail(email.Trim());
@@ -132,25 +142,13 @@ namespace sma.plan {
 				return string.IsNullOrWhiteSpace(fromHeader) ? localTestEmail : fromHeader;
 			}
 
-			if (_httpContext == null ||
-				!_httpContext.Request.Headers.TryGetValue("x-ms-client-principal", out var headerValues))
-			{
-				return null;
-			}
-
-			return EmailFromPrincipal(headerValues.First());
-		}
-
-		// For MCP tool calls. Locally there's no Easy Auth, so LOCAL_TEST_EMAIL
-		// stands in, as above.
-		public string GetEmail(string principalHeader)
-		{
-			var localTestEmail = Environment.GetEnvironmentVariable("LOCAL_TEST_EMAIL");
-
-			if (System.Diagnostics.Debugger.IsAttached || !string.IsNullOrEmpty(localTestEmail))
-			{
-				return localTestEmail;
-			}
+			// A website request brings Easy Auth's header itself. A Claude (MCP)
+			// tool call isn't a website request, so RequestContextMiddleware hands
+			// its header over instead.
+			string principalHeader =
+				_httpContext != null && _httpContext.Request.Headers.TryGetValue("x-ms-client-principal", out var headerValues)
+					? headerValues.First()
+					: _request.McpPrincipalHeader;
 
 			return EmailFromPrincipal(principalHeader);
 		}
@@ -195,6 +193,29 @@ namespace sma.plan {
 			{
 				return null;
 			}
+		}
+
+		// The sandbox's "Testing as" switch, on only where SANDBOX_ROLE_SWITCH is
+		// "true". Set it on the sandbox Function App alone - NEVER in production,
+		// where it would let anyone make themselves an admin.
+		public bool RoleSwitchEnabled()
+		{
+			return string.Equals(
+				Environment.GetEnvironmentVariable("SANDBOX_ROLE_SWITCH"), "true", StringComparison.OrdinalIgnoreCase);
+		}
+
+		// The role a tester picked, which the app sends as x-sandbox-role. Null
+		// when the switch is off, when none was picked, and for anything but a
+		// website request (Claude's tool calls keep the person's real role).
+		public string TestRole()
+		{
+			if (!RoleSwitchEnabled())
+			{
+				return null;
+			}
+
+			string role = _httpContext?.Request.Headers["x-sandbox-role"].FirstOrDefault()?.Trim().ToLowerInvariant();
+			return SandboxRoles.All.Contains(role) ? role : null;
 		}
 
 		public string WhoAmI()

@@ -56,8 +56,18 @@ namespace sma.plan
 				.GetByTeamMember(teamMemberId)
 				.Select(a => a.ProjectId)
 				.ToHashSet();
-			visible.UnionWith(ManagedBy(teamMemberId));
+			if (!TestingAsEmployee())
+			{
+				visible.UnionWith(ManagedBy(teamMemberId));
+			}
 			return visible;
+		}
+
+		// Testing as an employee on the sandbox: managing nothing, whatever the
+		// projects say, so no PM views open.
+		private bool TestingAsEmployee()
+		{
+			return _securityService.TestRole() == SandboxRoles.Employee;
 		}
 
 		private HashSet<string> ManagedBy(string teamMemberId)
@@ -78,7 +88,7 @@ namespace sma.plan
 		{
 			string teamMemberId = _securityService.GetCurrentTeamMemberId();
 
-			return string.IsNullOrWhiteSpace(teamMemberId)
+			return string.IsNullOrWhiteSpace(teamMemberId) || TestingAsEmployee()
 				? new HashSet<string>()
 				: ManagedBy(teamMemberId);
 		}

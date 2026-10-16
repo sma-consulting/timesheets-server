@@ -15,13 +15,13 @@ namespace sma.plan
 		string GetCurrentEmail();
 		bool IsCurrentUserAdmin();
 
-		// The same, for Claude's MCP tools: their calls aren't website requests,
-		// so they pass on the caller's x-ms-client-principal header themselves.
-		string GetEmail(string principalHeader);
-		bool IsAdmin(string principalHeader);
-
 		string GetCurrentTeamMemberId();
 		string GetCurrentUserId();
+
+		// Sandbox only: the "Testing as" switch, and the role picked in it
+		// (SandboxRoles), or null. See SecurityService.
+		bool RoleSwitchEnabled();
+		string TestRole();
 
 	}
 }

@@ -40,7 +40,7 @@ namespace sma.plan
 			Customer customer = JsonConvert.DeserializeObject<Customer>(
 				await new StreamReader(req.Body).ReadToEndAsync());
 
-			string invalid = Validate(customer);
+			string invalid = Customer.Validate(customer);
 			if (invalid != null)
 			{
 				return Invalid(invalid);
@@ -97,7 +97,7 @@ namespace sma.plan
 				await new StreamReader(req.Body).ReadToEndAsync());
 			customer.Id = id;
 
-			string invalid = Validate(customer);
+			string invalid = Customer.Validate(customer);
 			if (invalid != null)
 			{
 				return Invalid(invalid);
@@ -137,28 +137,6 @@ namespace sma.plan
 				{
 					deletedCustomer = c
 				});
-		}
-
-
-		private static string Validate(Customer customer)
-		{
-			if (customer == null || string.IsNullOrWhiteSpace(customer.Name))
-			{
-				return "A customer name is required.";
-			}
-
-			customer.Name = customer.Name.Trim();
-			customer.Code = customer.Code?.Trim();
-			customer.Currency = string.IsNullOrWhiteSpace(customer.Currency)
-				? "CAD"
-				: customer.Currency.Trim().ToUpperInvariant();
-
-			if (customer.Currency.Length != 3 || !customer.Currency.All(char.IsLetter))
-			{
-				return "Currency must be a 3-letter code such as CAD or USD.";
-			}
-
-			return null;
 		}
 	}
 }

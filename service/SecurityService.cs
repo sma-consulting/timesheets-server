@@ -86,8 +86,16 @@ namespace sma.plan {
 		// request belongs to. Returns false when nobody can be identified.
 		public bool IsCurrentUserAdmin()
 		{
-			var email = GetCurrentEmail();
+			return IsAdminEmail(GetCurrentEmail());
+		}
 
+		public bool IsAdmin(string principalHeader)
+		{
+			return IsAdminEmail(GetEmail(principalHeader));
+		}
+
+		private bool IsAdminEmail(string email)
+		{
 			if (string.IsNullOrWhiteSpace(email))
 			{
 				return false;
@@ -130,9 +138,35 @@ namespace sma.plan {
 				return null;
 			}
 
+			return EmailFromPrincipal(headerValues.First());
+		}
+
+		// For MCP tool calls. Locally there's no Easy Auth, so LOCAL_TEST_EMAIL
+		// stands in, as above.
+		public string GetEmail(string principalHeader)
+		{
+			var localTestEmail = Environment.GetEnvironmentVariable("LOCAL_TEST_EMAIL");
+
+			if (System.Diagnostics.Debugger.IsAttached || !string.IsNullOrEmpty(localTestEmail))
+			{
+				return localTestEmail;
+			}
+
+			return EmailFromPrincipal(principalHeader);
+		}
+
+		// Decodes the x-ms-client-principal header - base64 JSON - and returns the
+		// first claim that holds an email. Null when there isn't one.
+		private static string EmailFromPrincipal(string principalHeader)
+		{
+			if (string.IsNullOrWhiteSpace(principalHeader))
+			{
+				return null;
+			}
+
 			try
 			{
-				var json = Encoding.UTF8.GetString(Convert.FromBase64String(headerValues.First()));
+				var json = Encoding.UTF8.GetString(Convert.FromBase64String(principalHeader));
 				var principal = JsonConvert.DeserializeObject<ClientPrincipalDto>(json);
 
 				if (principal?.Claims == null)

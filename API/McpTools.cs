@@ -36,7 +36,10 @@ namespace sma.plan
             [McpToolProperty("name", "Who to greet.", isRequired: true)]
                 string name)
         {
-            return $"Hello {name}, this is the SMA timesheets server.";
+            // Also says who the caller is signed in as, to check sign-in works.
+            string email = _securityService.GetEmail(PrincipalHeader(context));
+            string who = email == null ? "I can't tell who you're signed in as." : $"You're signed in as {email}.";
+            return $"Hello {name}, this is the SMA timesheets server. {who}";
         }
 
         [Allow(Role.Anyone)]
@@ -81,7 +84,7 @@ namespace sma.plan
         {
             // Only admins create clients, as on the website. (MCP calls skip
             // SecurityMiddleware, so the tool checks for itself.)
-            if (!_securityService.IsCurrentUserAdmin())
+            if (!_securityService.IsAdmin(PrincipalHeader(context)))
             {
                 return "Only admins can create clients.";
             }
@@ -133,7 +136,7 @@ namespace sma.plan
         {
             // 1. Only admins create projects, as on the website. (MCP calls
             // skip SecurityMiddleware, so the tool checks for itself.)
-            if (!_securityService.IsCurrentUserAdmin())
+            if (!_securityService.IsAdmin(PrincipalHeader(context)))
             {
                 return "Only admins can create projects.";
             }
@@ -181,6 +184,20 @@ namespace sma.plan
 
             Project created = _projectService.CreateWithManager(project);
             return $"Created project '{created.Name}' (id {created.Id}).";
+        }
+
+        // The x-ms-client-principal header Easy Auth added to Claude's request
+        // once the caller signed in with Microsoft. Null when there isn't one.
+        private static string PrincipalHeader(ToolInvocationContext context)
+        {
+            if (!context.TryGetHttpTransport(out HttpTransport transport) || transport.Headers == null)
+            {
+                return null;
+            }
+
+            return transport.Headers
+                .FirstOrDefault(h => string.Equals(h.Key, "x-ms-client-principal", StringComparison.OrdinalIgnoreCase))
+                .Value;
         }
 
         // A date written yyyy-MM-dd, or nothing. False when it's something else.

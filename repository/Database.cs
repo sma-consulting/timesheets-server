@@ -28,5 +28,12 @@ namespace sma.plan
         {
             return (MongoCollectionBase<T>)DB.GetCollection<T>(typeof(T).Name);
         }
+
+        // Another collection than the class's own, read as T - for a partial
+        // view of its documents, such as LegacyProjectFinancials on Project.
+        public static MongoCollectionBase<T> GetCollection<T>(string name) where T : GeneralModel
+        {
+            return (MongoCollectionBase<T>)DB.GetCollection<T>(name);
+        }
     }
 }

@@ -31,12 +31,28 @@ namespace sma.plan
 
 		public decimal Hours { get; set; }
 
+		public string Notes { get; set; }
+
 		public bool Billable { get; set; }
 
 		public DateTime? LastModified { get; set; }
 
 		public string ModifiedBy { get; set; }
 
+		// Billed on an issued invoice, and which one: set when the invoice is
+		// issued, cleared if it's cancelled. The invoice's own list of what it
+		// billed is the record; this is a copy on the entry, for finding time
+		// not yet invoiced and for showing it. Kept by the server only, like
+		// History: an update carries it over, whatever the client sends.
+		public bool Invoiced { get; set; }
+
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string InvoiceId { get; set; }
+
+		// Earlier versions of this entry, oldest first. Kept by the server only:
+		// TimeEntryService carries it across updates, so a client can't write or
+		// erase it. Snapshots have none of their own, hence IgnoreIfNull.
+		[BsonIgnoreIfNull]
 		public List<TimeEntry> History { get; set; } = new List<TimeEntry>();
 
 		//Get a clone of data for History, omitting the audit log itself
@@ -51,11 +67,29 @@ namespace sma.plan
 				TeamMemberId = this.TeamMemberId,
 				Date = this.Date,
 				Hours = this.Hours,
+				Notes = this.Notes,
 				Billable = this.Billable,
 				LastModified = this.LastModified,
 				ModifiedBy = this.ModifiedBy,
 				History = null,
 			};
+		}
+
+		// Whether the parts a person can change are the same - not the audit
+		// fields. An unchanged save (the week grid saves on every blur) shouldn't
+		// add a history item.
+		public bool SameAs(TimeEntry other)
+		{
+			return other != null
+				&& CustomerId == other.CustomerId
+				&& ProjectId == other.ProjectId
+				&& ProjectTaskId == other.ProjectTaskId
+				&& ProjectSubTaskId == other.ProjectSubTaskId
+				&& TeamMemberId == other.TeamMemberId
+				&& Date == other.Date
+				&& Hours == other.Hours
+				&& (Notes ?? "") == (other.Notes ?? "")
+				&& Billable == other.Billable;
 		}
 	}
 }

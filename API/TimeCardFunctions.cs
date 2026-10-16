@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Core.Events;
 using Newtonsoft.Json;
@@ -27,10 +26,12 @@ namespace sma.plan
 		public TimeCardFunctions(ITeamMemberService teamMemberService, ITimeCardService timeCardService, ILogger<TeamMemberConfigFunctions> logger)
 		{
 			_teamMemberService = teamMemberService;
+			_timeCardService = timeCardService;
 			_logger = logger;
 		}
 
-		[FunctionName("CreateTimeCard")]
+		[Allow(Role.Admin)]
+		[Function("CreateTimeCard")]
 		public async Task<IActionResult> RunCreateTimeCard(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "teamMember/{id}/timeCards/{date}/create")] HttpRequest req,
 			string id, string date)
@@ -51,20 +52,8 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("DeleteTeamMember")]
-		public async Task<IActionResult> RunDeleteTeamMember(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "teamMember/{id}/delete/")] HttpRequest req, string id)
-		{
-			return Ok(
-				() => (new DatabaseRepo<TeamMember>()).Delete(id),
-				(p) => new
-				{
-					deletedTeamMember = p
-				});
-		}
-
-
-		[FunctionName("GetTimeCard")]
+		[Allow(Role.Admin)]
+		[Function("GetTimeCard")]
 		public async Task<IActionResult> RunGetTimeCard(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "teamMember/{id}/timeCard/{month}")] HttpRequest req, string id)
 		{
@@ -77,33 +66,5 @@ namespace sma.plan
 		}
 
 
-		[FunctionName("UpdateTeamMember")]
-		public async Task<IActionResult> RunUpdateTeamMember(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "teamMember/{id}/update/")] HttpRequest req, string id)
-		{
-			TeamMember teamMember = JsonConvert.DeserializeObject<TeamMember>(
-				await new StreamReader(req.Body).ReadToEndAsync());
-			teamMember.Id = id;
-
-			return Ok(
-				() => _teamMemberService.Update(teamMember),
-				(res) => new
-				{
-					newTeamMember = res,
-				});
-		}
-
-
-		[FunctionName("GetAllTeamMember")]
-		public async Task<IActionResult> RunGetAllTeamMember(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "teamMember/")] HttpRequest req)
-		{
-			return Ok(
-				() => _teamMemberService.GetAllTeamMembers(),
-				(p) => new
-				{
-					teamMemberList = p
-				});
-		}
 	}
 }

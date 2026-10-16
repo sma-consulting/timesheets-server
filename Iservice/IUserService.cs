@@ -8,5 +8,7 @@ namespace sma.plan
 {
 	internal interface IUserService
 	{
+		TeamMember ResolveOrCreate(string email);
+		bool IsAdmin(string email);
 	}
 }

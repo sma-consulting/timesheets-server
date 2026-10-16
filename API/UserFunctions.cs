@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver.Core.Events;
 using Newtonsoft.Json;
@@ -16,34 +15,91 @@ using System.Threading.Tasks;
 
 namespace sma.plan
 {
+    internal class LoginRequest
+    {
+        public string Email { get; set; }
+    }
+
     internal class UserFunctions : RequestHandler
     {
 
         private ISecurityService _securityService;
+        private IUserService _userService;
         private ILogger<UserFunctions> _logger;
 
 
-		public UserFunctions(ISecurityService securityService, ILogger<UserFunctions> logger) 
+		public UserFunctions(ISecurityService securityService, IUserService userService, ILogger<UserFunctions> logger) 
         { 
             _securityService = securityService;
+            _userService = userService;
             _logger = logger;
         }
 
-		[FunctionName("WhoAmI")]
+		private static IActionResult NotSignedIn()
+		{
+			return new OkObjectResult(new
+			{
+				status = new { code = 401, error = "Not signed in." },
+				result = new { },
+			});
+		}
+
+		[Allow(Role.Anyone)]
+		[Function("WhoAmI")]
 		public async Task<IActionResult> RunWhoAmI(
 		[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "whoami")] HttpRequest req)
 		{
+			var email = _securityService.GetCurrentEmail();
 
-            var userName = _securityService.WhoAmI();
+			if (string.IsNullOrWhiteSpace(email))
+			{
+				return NotSignedIn();
+			}
 
-			var userObj = new { userName };
-			return new OkObjectResult(userObj);
+			return Ok(
+				() => _userService.ResolveOrCreate(email),
+				(t) => new
+				{
+					teamMember = t,
+					isAdmin = _userService.IsAdmin(email)
+				});
 		}
 
-		[FunctionName("CreateUser")]
+
+		[Allow(Role.Anyone)]
+		[Function("Login")]
+		public async Task<IActionResult> RunLogin(
+		[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "login")] HttpRequest req)
+		{
+			LoginRequest login = JsonConvert.DeserializeObject<LoginRequest>(
+				await new StreamReader(req.Body).ReadToEndAsync());
+
+			if (string.IsNullOrWhiteSpace(login?.Email))
+			{
+				return NotSignedIn();
+			}
+
+			return Ok(
+				() => _userService.ResolveOrCreate(login.Email),
+				(t) => new
+				{
+					teamMember = t,
+					isAdmin = _userService.IsAdmin(login.Email)
+				});
+		}
+
+		[Allow(Role.Admin)]
+		[Function("CreateUser")]
         public async Task<IActionResult> RunCreateUser(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "user/create/")] HttpRequest req)
         {
+            // User carries IsAdmin, so this is the privilege table - anyone able to
+            // write it could make themselves an administrator.
+            if (!_securityService.IsCurrentUserAdmin())
+            {
+                return Forbidden();
+            }
+
             User user = JsonConvert.DeserializeObject<User>(
                 await new StreamReader(req.Body).ReadToEndAsync());
 
@@ -56,10 +112,16 @@ namespace sma.plan
         }
 
 
-        [FunctionName("DeleteUser")]
+        [Allow(Role.Admin)]
+        [Function("DeleteUser")]
         public async Task<IActionResult> RunDeleteUser(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "user/{id}/delete/")] HttpRequest req, string id)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "user/{id}/")] HttpRequest req, string id)
         {
+            if (!_securityService.IsCurrentUserAdmin())
+            {
+                return Forbidden();
+            }
+
             return Ok(
                 () => (new DatabaseRepo<User>()).Delete(id),
                 (p) => new
@@ -69,7 +131,8 @@ namespace sma.plan
         }
 
 
-        [FunctionName("GetUser")]
+        [Allow(Role.Admin)]
+        [Function("GetUser")]
         public async Task<IActionResult> RunGetUser(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "user/{id}/")] HttpRequest req, string id)
         {
@@ -82,10 +145,16 @@ namespace sma.plan
         }
 
 
-        [FunctionName("UpdateUser")]
+        [Allow(Role.Admin)]
+        [Function("UpdateUser")]
         public async Task<IActionResult> RunUpdateUser(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "user/{id}/update/")] HttpRequest req, string id)
         {
+            if (!_securityService.IsCurrentUserAdmin())
+            {
+                return Forbidden();
+            }
+
             User user = JsonConvert.DeserializeObject<User>(
                 await new StreamReader(req.Body).ReadToEndAsync());
             user.Id = id;

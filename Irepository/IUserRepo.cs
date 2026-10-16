@@ -14,5 +14,6 @@ namespace sma.plan
 		User Get(string id);
 		List<User> GetAll();
 		Tuple<User, User> Update(User data);
+		User GetByEmail(string email);
 	}
 }

@@ -1,9 +1,8 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using Microsoft.Azure.WebJobs;
+using Microsoft.Azure.Functions.Worker;
 using System;
 using System.Collections.Generic;
 using System.Linq;

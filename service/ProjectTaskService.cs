@@ -9,40 +9,33 @@ namespace sma.plan
 	internal class ProjectTaskService : IProjectTaskService
 	{
 		private IProjectTaskRepo _repo;
-		private ISecurityService _securityService;
 		private IProjectService _projectService;
 
 		public ProjectTaskService(
 			IProjectTaskRepo repo,
-			ISecurityService securityService,
 			IProjectService projectService)
 		{
 			_repo = repo;
-			_securityService = securityService;
 			_projectService = projectService;
 		}
 
 		public ProjectTask Create(ProjectTask projectTask)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Create(projectTask);
 		}
 
 		public ProjectTask Update(ProjectTask projectTask)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Update(projectTask).Item2;
 		}
 
 		public ProjectTask Get(string id)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Get(id);
 		}
 
 		public ProjectTask Delete(string id)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Delete(id);
 		}
 
@@ -51,8 +44,6 @@ namespace sma.plan
 		// the caller was never shown.
 		public List<ProjectTask> GetAllProjectTasks()
 		{
-			_securityService.AuthorizeUser();
-
 			HashSet<string> visible = _projectService.VisibleProjectIds();
 
 			return visible == null

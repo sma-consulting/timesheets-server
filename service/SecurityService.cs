@@ -222,10 +222,5 @@ namespace sma.plan {
 		{
 			return _principal?.GetUserName();
 		}
-
-		public bool AuthorizeUser()
-		{
-			return true;
-		}
 	}
 }

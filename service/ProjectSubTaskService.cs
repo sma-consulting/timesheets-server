@@ -9,43 +9,36 @@ namespace sma.plan
 	internal class ProjectSubTaskService : IProjectSubTaskService
 	{
 		private IProjectSubTaskRepo _repo;
-		private ISecurityService _securityService;
 		private IProjectService _projectService;
 		private IProjectTaskRepo _taskRepo;
 
 		public ProjectSubTaskService(
 			IProjectSubTaskRepo repo,
-			ISecurityService securityService,
 			IProjectService projectService,
 			IProjectTaskRepo taskRepo)
 		{
 			_repo = repo;
-			_securityService = securityService;
 			_projectService = projectService;
 			_taskRepo = taskRepo;
 		}
 
 		public ProjectSubTask Create(ProjectSubTask projectSubTask)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Create(projectSubTask);
 		}
 
 		public ProjectSubTask Update(ProjectSubTask projectSubTask)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Update(projectSubTask).Item2;
 		}
 
 		public ProjectSubTask Get(string id)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Get(id);
 		}
 
 		public ProjectSubTask Delete(string id)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Delete(id);
 		}
 
@@ -58,8 +51,6 @@ namespace sma.plan
 		// the tree is actually built from, so it is the one to trust.
 		public List<ProjectSubTask> GetAllProjectSubTasks()
 		{
-			_securityService.AuthorizeUser();
-
 			HashSet<string> visible = _projectService.VisibleProjectIds();
 
 			if (visible == null)

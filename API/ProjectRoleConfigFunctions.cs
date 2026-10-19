@@ -17,7 +17,6 @@ namespace sma.plan
     internal class ProjectRoleConfigFunctions : RequestHandler
     {
         private readonly ILogger<ProjectRoleConfigFunctions> _logger;
-        private readonly ISecurityService _securityService;
         private readonly IProjectAssignmentRepo _assignmentRepo;
         private readonly ITeamMemberRepo _teamMemberRepo;
         private readonly IProjectBillingRateRepo _rateRepo;
@@ -25,13 +24,11 @@ namespace sma.plan
 
         public ProjectRoleConfigFunctions(
             ILogger<ProjectRoleConfigFunctions> logger,
-            ISecurityService securityService,
             IProjectAssignmentRepo assignmentRepo,
             ITeamMemberRepo teamMemberRepo,
             IProjectBillingRateRepo rateRepo)
         {
             _logger = logger;
-            _securityService = securityService;
             _assignmentRepo = assignmentRepo;
             _teamMemberRepo = teamMemberRepo;
             _rateRepo = rateRepo;
@@ -42,11 +39,6 @@ namespace sma.plan
         public async Task<IActionResult> RunCreateProjectRole(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectRole/create/")] HttpRequest req)
         {
-            if (!_securityService.IsCurrentUserAdmin())
-            {
-                return Forbidden();
-            }
-
             ProjectRole projectRole = JsonConvert.DeserializeObject<ProjectRole>(
                 await new StreamReader(req.Body).ReadToEndAsync());
 
@@ -73,11 +65,6 @@ namespace sma.plan
         public async Task<IActionResult> RunDeleteProjectRole(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectRole/{id}/")] HttpRequest req, string id)
         {
-            if (!_securityService.IsCurrentUserAdmin())
-            {
-                return Forbidden();
-            }
-
             long assignments = _assignmentRepo.CountByRole(id);
             long teamMembers = _teamMemberRepo.CountWithRole(id);
             long rates = _rateRepo.CountByRole(id);
@@ -131,11 +118,6 @@ namespace sma.plan
         public async Task<IActionResult> RunUpdateProjectRole(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectRole/{id}/update/")] HttpRequest req, string id)
         {
-            if (!_securityService.IsCurrentUserAdmin())
-            {
-                return Forbidden();
-            }
-
             ProjectRole projectRole = JsonConvert.DeserializeObject<ProjectRole>(
                 await new StreamReader(req.Body).ReadToEndAsync());
             projectRole.Id = id;

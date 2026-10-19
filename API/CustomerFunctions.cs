@@ -15,16 +15,13 @@ namespace sma.plan
 	{
 		private readonly ICustomerRepo _customerRepo;
 		private readonly IProjectRepo _projectRepo;
-		private readonly ISecurityService _securityService;
 
 		public CustomerFunctions(
 			ICustomerRepo customerRepo,
-			IProjectRepo projectRepo,
-			ISecurityService securityService)
+			IProjectRepo projectRepo)
 		{
 			_customerRepo = customerRepo;
 			_projectRepo = projectRepo;
-			_securityService = securityService;
 		}
 
 		[Allow(Role.Admin)]
@@ -32,11 +29,6 @@ namespace sma.plan
 		public async Task<IActionResult> RunCreateCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "customer/")] HttpRequest req)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			Customer customer = JsonConvert.DeserializeObject<Customer>(
 				await new StreamReader(req.Body).ReadToEndAsync());
 
@@ -88,11 +80,6 @@ namespace sma.plan
 		public async Task<IActionResult> RunUpdateCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "customer/{id}/update/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			Customer customer = JsonConvert.DeserializeObject<Customer>(
 				await new StreamReader(req.Body).ReadToEndAsync());
 			customer.Id = id;
@@ -119,11 +106,6 @@ namespace sma.plan
 		public async Task<IActionResult> RunDeleteCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "customer/{id}/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			long inUse = _projectRepo.CountByCustomer(id);
 			if (inUse > 0)
 			{

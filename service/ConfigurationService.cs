@@ -10,24 +10,20 @@ namespace sma.plan
 	{
 		private ICurveDistributionRepo _curveDistributionRepo;
 		private IRangeDistributionRepo _rangeDistributionRepo;
-		private ISecurityService _securityService;
 
-		public ConfigurationService(ICurveDistributionRepo curveDistributionRepo, IRangeDistributionRepo rangeDistributionRepo, ISecurityService securityService) 
-		{ 
+		public ConfigurationService(ICurveDistributionRepo curveDistributionRepo, IRangeDistributionRepo rangeDistributionRepo)
+		{
 			_curveDistributionRepo = curveDistributionRepo;
-			_rangeDistributionRepo = rangeDistributionRepo;	
-			_securityService = securityService;
+			_rangeDistributionRepo = rangeDistributionRepo;
 		}
 
 		public List<CurveDistribution> GetAllCurveDistributions()
 		{
-			_securityService.AuthorizeUser();
 			return _curveDistributionRepo.GetAll();
 		}
 
 		public List<RangeDistribution> GetAllRangeDistributions()
 		{
-			_securityService.AuthorizeUser();
 			return _rangeDistributionRepo.GetAll();
 		}
 

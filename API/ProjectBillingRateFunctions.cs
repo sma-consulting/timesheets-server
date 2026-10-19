@@ -72,11 +72,6 @@ namespace sma.plan
 		public async Task<IActionResult> RunCreateProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectBillingRate/")] HttpRequest req)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			ProjectBillingRate rate = JsonConvert.DeserializeObject<ProjectBillingRate>(
 				await new StreamReader(req.Body).ReadToEndAsync());
 
@@ -129,11 +124,6 @@ namespace sma.plan
 		public async Task<IActionResult> RunUpdateProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectBillingRate/{id}/update/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			ProjectBillingRate existing = _rateRepo.Get(id);
 			if (existing == null)
 			{
@@ -178,11 +168,6 @@ namespace sma.plan
 		public async Task<IActionResult> RunDeleteProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectBillingRate/{id}/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			ProjectBillingRate existing = _rateRepo.Get(id);
 			if (existing == null)
 			{

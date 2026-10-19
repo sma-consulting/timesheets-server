@@ -19,18 +19,15 @@ namespace sma.plan
 	{
 
         private readonly IProjectService _projectService;
-        private readonly ISecurityService _securityService;
         private readonly IProjectFinancialsRepo _financialsRepo;
         private readonly ILogger<ProjectConfigFunctions> _logger;
 
         public ProjectConfigFunctions(
             IProjectService projectService,
-            ISecurityService securityService,
             IProjectFinancialsRepo financialsRepo,
             ILogger<ProjectConfigFunctions> logger)
         {
             _projectService = projectService;
-            _securityService = securityService;
             _financialsRepo = financialsRepo;
             _logger = logger;
         }
@@ -40,11 +37,6 @@ namespace sma.plan
         public async Task<IActionResult> RunCreateProject(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "project/")] HttpRequest req)
         {
-            if (!_securityService.IsCurrentUserAdmin())
-            {
-                return Forbidden();
-            }
-
             Project project = JsonConvert.DeserializeObject<Project>(
                 await new StreamReader(req.Body).ReadToEndAsync());
 
@@ -68,11 +60,6 @@ namespace sma.plan
         public async Task<IActionResult> RunDeleteProject(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "project/{id}/")] HttpRequest req, string id)
         {
-            if (!_securityService.IsCurrentUserAdmin())
-            {
-                return Forbidden();
-            }
-
             return Ok(
                 () =>
                 {
@@ -112,11 +99,6 @@ namespace sma.plan
         public async Task<IActionResult> RunUpdateProject(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "project/{id}/update/")] HttpRequest req, string id)
         {
-            if (!_securityService.IsCurrentUserAdmin())
-            {
-                return Forbidden();
-            }
-
             Project project = JsonConvert.DeserializeObject<Project>(
                 await new StreamReader(req.Body).ReadToEndAsync());
             project.Id = id;

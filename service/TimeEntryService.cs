@@ -205,7 +205,6 @@ namespace sma.plan
 		// the first snapshot an update takes records who created it and when.
 		public TimeEntry Create(TimeEntry timeEntry)
 		{
-			_securityService.AuthorizeUser();
 			timeEntry.TeamMemberId = OwnerFor(timeEntry);
 			timeEntry.History = new List<TimeEntry>();
 			timeEntry.LastModified = DateTime.UtcNow;
@@ -221,7 +220,6 @@ namespace sma.plan
 		// than taken from the request, then the old version goes onto History.
 		public TimeEntry Update(TimeEntry timeEntry)
 		{
-			_securityService.AuthorizeUser();
 			timeEntry.TeamMemberId = OwnerFor(timeEntry);
 
 			TimeEntry existing = _repo.Get(timeEntry.Id);
@@ -273,13 +271,11 @@ namespace sma.plan
 
 		public TimeEntry Get(string id)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Get(id);
 		}
 
 		public TimeEntry Delete(string id)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Delete(id);
 		}
 
@@ -305,8 +301,6 @@ namespace sma.plan
 		// failing closed matters more here than a helpful fallback.
 		public List<TimeEntry> GetAllTimeEntries()
 		{
-			_securityService.AuthorizeUser();
-
 			if (_securityService.IsCurrentUserAdmin())
 			{
 				return _repo.GetAll();

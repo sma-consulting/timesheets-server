@@ -10,35 +10,29 @@ namespace sma.plan
 	{
 
 		private ITeamMemberRepo _repo;
-		private ISecurityService _securityService;
 
-		public TeamMemberService(ITeamMemberRepo repo, ISecurityService securityService)
+		public TeamMemberService(ITeamMemberRepo repo)
 		{
 			_repo = repo;
-			_securityService = securityService;
 		}
 
 		public TeamMember Create(TeamMember project)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Create(project);
 		}
 
 		public TeamMember Get(string id)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Get(id);
 		}
 
 		public List<TeamMember> GetAllTeamMembers()
 		{
-			_securityService.AuthorizeUser();
 			return _repo.GetAll();
 		}
 
 		public TeamMember Update(TeamMember project)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Update(project).Item2;
 		}
 	}

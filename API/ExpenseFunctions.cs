@@ -283,11 +283,6 @@ namespace sma.plan
 		public async Task<IActionResult> RunReviewExpense(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "expense/{id}/review/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden("Only admins can review expenses.");
-			}
-
 			Expense expense = _expenseRepo.Get(id);
 			if (expense == null)
 			{

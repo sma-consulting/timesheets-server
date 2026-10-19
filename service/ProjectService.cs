@@ -103,7 +103,6 @@ namespace sma.plan
 
 		public Project Create(Project newProject)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Create(newProject);
 		}
 
@@ -201,20 +200,16 @@ namespace sma.plan
 
 		public Project Update(Project project)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Update(project).Item2;
 		}
 
 		public Project Get(string id)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Get(id);
 		}
 
 		public List<Project> GetAllProjects()
 		{
-			_securityService.AuthorizeUser();
-
 			HashSet<string> visible = AssignedProjectIds();
 
 			return visible == null

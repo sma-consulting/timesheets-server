@@ -14,18 +14,15 @@ namespace sma.plan
 	{
 
 		private readonly IProjectSubTaskService _projectSubTaskService;
-		private readonly ISecurityService _securityService;
 		private readonly ITimeEntryRepo _timeEntryRepo;
 		private readonly ILogger<ProjectSubTaskFunctions> _logger;
 
 		public ProjectSubTaskFunctions(
 			IProjectSubTaskService projectSubTaskService,
-			ISecurityService securityService,
 			ITimeEntryRepo timeEntryRepo,
 			ILogger<ProjectSubTaskFunctions> logger)
 		{
 			_projectSubTaskService = projectSubTaskService;
-			_securityService = securityService;
 			_timeEntryRepo = timeEntryRepo;
 			_logger = logger;
 		}
@@ -55,11 +52,6 @@ namespace sma.plan
 		public async Task<IActionResult> RunDeleteProjectSubTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectSubTask/{id}/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			long logged = _timeEntryRepo.CountLoggedAgainst(Enumerable.Empty<string>(), new[] { id });
 			if (logged > 0)
 			{

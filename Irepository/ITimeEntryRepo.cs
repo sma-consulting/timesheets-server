@@ -23,5 +23,17 @@ namespace sma.plan
 
 		// How many entries are marked invoiced.
 		long CountInvoiced();
+
+		
+		// The team member's own entries, plus everyone's on the given projects.
+		List<TimeEntry> GetVisibleTo(string teamMemberId, IEnumerable<string> projectIds);
+				
+		// How many entries are logged against any of the tasks or sub-tasks.
+		long CountLoggedAgainst(IEnumerable<string> projectTaskIds, IEnumerable<string> projectSubTaskIds);
+
+		// Every entry on the project.
+		List<TimeEntry> GetByProject(string projectId);
+
+
 	}
 }

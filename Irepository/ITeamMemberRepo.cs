@@ -14,5 +14,14 @@ namespace sma.plan
 		List<TeamMember> GetAll();
 		Tuple<TeamMember, TeamMember> Update(TeamMember data);
 		TeamMember GetByUserId(string userId);
+
+		// Whether a team member with the id exists.
+		bool Exists(string id);
+
+		// The team members with these ids.
+		List<TeamMember> GetByIds(IEnumerable<string> ids);
+
+		// How many team members have the role among their AssignedRoles.
+		long CountWithRole(string projectRoleId);
 	}
 }

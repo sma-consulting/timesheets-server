@@ -13,5 +13,11 @@ namespace sma.plan
 		ProjectTask Get(string id);
 		List<ProjectTask> GetAll();
 		Tuple<ProjectTask, ProjectTask> Update(ProjectTask data);
+
+		// The tasks with these ids.
+		List<ProjectTask> GetByIds(IEnumerable<string> ids);
+
+		// The tasks on any of the projects.
+		List<ProjectTask> GetByProjects(IEnumerable<string> projectIds);
 	}
 }

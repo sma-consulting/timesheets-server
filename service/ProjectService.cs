@@ -72,12 +72,7 @@ namespace sma.plan
 
 		private HashSet<string> ManagedBy(string teamMemberId)
 		{
-			return _repo
-				.GetAll()
-				.Where(p => !string.IsNullOrWhiteSpace(p.ProjectManagerId) &&
-					p.ProjectManagerId == teamMemberId)
-				.Select(p => p.Id)
-				.ToHashSet();
+			return _repo.IdsManagedBy(teamMemberId);
 		}
 
 		// The projects the caller is Project Manager of (Project.ProjectManagerId).
@@ -220,12 +215,11 @@ namespace sma.plan
 		{
 			_securityService.AuthorizeUser();
 
-			List<Project> all = _repo.GetAll();
 			HashSet<string> visible = AssignedProjectIds();
 
 			return visible == null
-				? all
-				: all.Where(p => visible.Contains(p.Id)).ToList();
+				? _repo.GetAll()
+				: _repo.GetByIds(visible);
 		}
 	}
 }

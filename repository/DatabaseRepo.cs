@@ -1,4 +1,5 @@
-﻿using MongoDB.Driver;
+﻿using MongoDB.Bson;
+using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -39,6 +40,21 @@ namespace sma.plan
         public List<T> GetAll()
         {
             return DBCollection.Find(_ => true).ToList();
+        }
+
+        // Whether a document with the id exists - asks the database, loads nothing.
+        public bool Exists(string id)
+        {
+            return ObjectId.TryParse(id, out _)
+                && DBCollection.CountDocuments(d => d.Id == id, new CountOptions { Limit = 1 }) > 0;
+        }
+
+        // Ids that aren't ObjectIds can't match anything, and would throw in a filter.
+        protected static List<string> ValidIds(IEnumerable<string> ids)
+        {
+            return (ids ?? Enumerable.Empty<string>())
+                .Where(id => ObjectId.TryParse(id, out _))
+                .ToList();
         }
     }
 }

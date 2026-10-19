@@ -124,7 +124,7 @@ namespace sma.plan
 				return Forbidden();
 			}
 
-			int inUse = _projectRepo.GetAll().Count(p => p.CustomerId == id);
+			long inUse = _projectRepo.CountByCustomer(id);
 			if (inUse > 0)
 			{
 				return Invalid(string.Format(

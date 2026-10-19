@@ -78,11 +78,9 @@ namespace sma.plan
                 return Forbidden();
             }
 
-            int assignments = _assignmentRepo.GetAll().Count(a => a.ProjectRoleId == id);
-            int teamMembers = _teamMemberRepo.GetAll()
-                .Count(t => t.AssignedRoles != null && t.AssignedRoles.Contains(id));
-
-            int rates = _rateRepo.GetAll().Count(r => r.ProjectRoleId == id);
+            long assignments = _assignmentRepo.CountByRole(id);
+            long teamMembers = _teamMemberRepo.CountWithRole(id);
+            long rates = _rateRepo.CountByRole(id);
 
             if (assignments > 0 || teamMembers > 0 || rates > 0)
             {

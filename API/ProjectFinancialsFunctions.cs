@@ -51,7 +51,6 @@ namespace sma.plan
 		{
 			bool admin = _securityService.IsCurrentUserAdmin();
 			HashSet<string> managed = admin ? null : _projectService.ManagedProjectIds();
-			bool Visible(string projectId) => admin || managed.Contains(projectId ?? "");
 
 			return Ok(
 				() =>
@@ -64,9 +63,8 @@ namespace sma.plan
 					}
 					return new
 					{
-						financialsList = _financialsRepo.GetAll().Where(f => Visible(f.ProjectId)).ToList(),
-						uninvoicedExpenseList = _expenseRepo.GetAll()
-							.Where(e => e.Status == Expense.StatusApproved && e.Billable && !e.Invoiced && Visible(e.ProjectId))
+						financialsList = admin ? _financialsRepo.GetAll() : _financialsRepo.GetByProjects(managed),
+						uninvoicedExpenseList = _expenseRepo.GetUninvoicedBillable(admin ? null : managed)
 							.GroupBy(e => e.ProjectId)
 							.Select(g => new
 							{
@@ -93,7 +91,7 @@ namespace sma.plan
 			{
 				return Invalid("The financials are missing.");
 			}
-			if (!_projectRepo.GetAll().Any(p => p.Id == projectId))
+			if (!_projectRepo.Exists(projectId))
 			{
 				return Invalid("That project no longer exists.");
 			}

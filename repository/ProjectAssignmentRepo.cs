@@ -20,5 +20,11 @@ namespace sma.plan
 			var filter = Builders<ProjectAssignment>.Filter.Eq(a => a.TeamMemberId, teamMemberId);
 			return DBCollection.Find(filter).ToList();
 		}
+
+		public long CountByRole(string projectRoleId)
+		{
+			var filter = Builders<ProjectAssignment>.Filter.In(a => a.ProjectRoleId, ValidIds(new[] { projectRoleId }));
+			return DBCollection.CountDocuments(filter);
+		}
 	}
 }

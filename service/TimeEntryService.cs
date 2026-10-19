@@ -307,11 +307,9 @@ namespace sma.plan
 		{
 			_securityService.AuthorizeUser();
 
-			List<TimeEntry> all = _repo.GetAll();
-
 			if (_securityService.IsCurrentUserAdmin())
 			{
-				return all;
+				return _repo.GetAll();
 			}
 
 			string callerTeamMemberId = _securityService.GetCurrentTeamMemberId();
@@ -323,12 +321,21 @@ namespace sma.plan
 
 			// Project Managers also get everyone's entries on the projects they
 			// manage, so they can review them. MayWrite keeps those read-only.
-			HashSet<string> managed = _projectService.ManagedProjectIds();
+			return _repo.GetVisibleTo(callerTeamMemberId, _projectService.ManagedProjectIds());
+		}
 
-			return all
-				.Where(t => t.TeamMemberId == callerTeamMemberId ||
-					(!string.IsNullOrWhiteSpace(t.ProjectId) && managed.Contains(t.ProjectId)))
-				.ToList();
+		// Unlike GetAllTimeEntries, never anyone else's: an admin gets their own
+		// entries here, not everyone's.
+		public List<TimeEntry> GetOwnTimeEntries()
+		{
+			string callerTeamMemberId = _securityService.GetCurrentTeamMemberId();
+
+			if (string.IsNullOrWhiteSpace(callerTeamMemberId))
+			{
+				return new List<TimeEntry>();
+			}
+
+			return _repo.GetVisibleTo(callerTeamMemberId, Enumerable.Empty<string>());
 		}
 	}
 }

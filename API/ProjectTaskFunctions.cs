@@ -63,14 +63,11 @@ namespace sma.plan
 				return Forbidden();
 			}
 
-			var subTaskIds = _subTaskRepo.GetAll()
-				.Where(s => s.ProjectTaskId == id)
+			var subTaskIds = _subTaskRepo.GetByTask(id)
 				.Select(s => s.Id)
 				.ToList();
 
-			int logged = _timeEntryRepo.GetAll().Count(t =>
-				t.ProjectTaskId == id ||
-				(t.ProjectSubTaskId != null && subTaskIds.Contains(t.ProjectSubTaskId)));
+			long logged = _timeEntryRepo.CountLoggedAgainst(new[] { id }, subTaskIds);
 
 			if (logged > 0)
 			{

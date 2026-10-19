@@ -60,7 +60,7 @@ namespace sma.plan
 				return Forbidden();
 			}
 
-			int logged = _timeEntryRepo.GetAll().Count(t => t.ProjectSubTaskId == id);
+			long logged = _timeEntryRepo.CountLoggedAgainst(Enumerable.Empty<string>(), new[] { id });
 			if (logged > 0)
 			{
 				return Invalid(string.Format(

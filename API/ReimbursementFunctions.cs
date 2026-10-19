@@ -76,8 +76,11 @@ namespace sma.plan
 				return Invalid("That period hasn't started yet.");
 			}
 
-			List<Expense> due = _expenseRepo.GetAll()
-				.Where(e => e.Status == Expense.StatusApproved && e.Reimbursable && !e.Reimbursed && e.Date <= batchDate)
+			// The date is checked here rather than in the query: dates are stored
+			// as {Year, Month, Day} documents, which the database isn't relied on
+			// to compare.
+			List<Expense> due = _expenseRepo.GetAwaitingReimbursement()
+				.Where(e => e.Date <= batchDate)
 				.ToList();
 			if (due.Count == 0)
 			{
@@ -88,7 +91,7 @@ namespace sma.plan
 				return Invalid("The batch has changed since it was shown. Check it again before filing.");
 			}
 
-			Dictionary<string, string> names = _teamMemberRepo.GetAll()
+			Dictionary<string, string> names = _teamMemberRepo.GetByIds(due.Select(e => e.TeamMemberId))
 				.Where(m => !string.IsNullOrWhiteSpace(m.Id))
 				.GroupBy(m => m.Id)
 				.ToDictionary(g => g.Key, g => g.First().Name);
@@ -154,7 +157,7 @@ namespace sma.plan
 			return Ok(
 				() =>
 				{
-					foreach (Expense expense in _expenseRepo.GetAll().Where(e => e.ReimbursementBatchId == id))
+					foreach (Expense expense in _expenseRepo.GetByReimbursementBatch(id))
 					{
 						expense.Reimbursed = false;
 						expense.ReimbursementBatchId = null;

@@ -17,6 +17,12 @@ namespace sma.plan
 			return DBCollection.Find(filter).FirstOrDefault();
 		}
 
+		public List<ProjectFinancials> GetByProjects(IEnumerable<string> projectIds)
+		{
+			var filter = Builders<ProjectFinancials>.Filter.In(f => f.ProjectId, ValidIds(projectIds));
+			return DBCollection.Find(filter).SortBy(f => f.Id).ToList();
+		}
+
 		public ProjectFinancials Save(ProjectFinancials financials)
 		{
 			ProjectFinancials stored = GetByProject(financials.ProjectId);

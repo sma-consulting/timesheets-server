@@ -11,5 +11,8 @@ namespace sma.plan
 		List<ProjectBillingRate> GetAll();
 		Tuple<ProjectBillingRate, ProjectBillingRate> Update(ProjectBillingRate data);
 		List<ProjectBillingRate> GetByProject(string projectId);
+
+		// How many rates are for the role.
+		long CountByRole(string projectRoleId);
 	}
 }

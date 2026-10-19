@@ -81,7 +81,7 @@ namespace sma.plan
 
 			var managed = _projectService.ManagedProjectIds();
 			return Ok(
-				() => _expenseRepo.GetAll().Where(e => managed.Contains(e.ProjectId ?? "")).ToList(),
+				() => _expenseRepo.GetByProjects(managed),
 				(e) => new { expenseList = e });
 		}
 

@@ -67,7 +67,7 @@ namespace sma.plan
 				return Invalid(invalid);
 			}
 
-			if (!_projectRepo.GetAll().Any(p => p.Id == invoice.ProjectId))
+			if (!_projectRepo.Exists(invoice.ProjectId))
 			{
 				return Invalid("That project no longer exists.");
 			}
@@ -162,9 +162,7 @@ namespace sma.plan
 
 			HashSet<string> managed = _projectService.ManagedProjectIds();
 			return Ok(
-				() => WithBilledCopies(_invoiceRepo.GetAll()
-					.Where(i => i.Issued && managed.Contains(i.ProjectId))
-					.ToList()),
+				() => WithBilledCopies(_invoiceRepo.GetIssuedOnProjects(managed)),
 				(i) => new
 				{
 					invoiceList = i
@@ -284,7 +282,7 @@ namespace sma.plan
 			stored.IssuedBy = _securityService.GetCurrentUserId();
 			stored.TimeEntries = TimeEntriesFor(stored);
 			CopyBilledProject(stored);
-			CopyBilledExpenses(stored, _expenseRepo.GetAll());
+			CopyBilledExpenses(stored, _expenseRepo.GetByIds(ExpenseIdsOf(stored)));
 
 			return Ok(
 				() =>
@@ -417,7 +415,7 @@ namespace sma.plan
 				return;
 			}
 
-			foreach (Expense expense in _expenseRepo.GetAll().Where(e => ids.Contains(e.Id)))
+			foreach (Expense expense in _expenseRepo.GetByIds(ids))
 			{
 				if (expense.Invoiced != invoiced)
 				{
@@ -472,16 +470,19 @@ namespace sma.plan
 		// count: cancelling frees the month for a new invoice.
 		private Invoice InvoiceFor(string projectId, DateOnly month)
 		{
-			return _invoiceRepo.GetAll()
-				.FirstOrDefault(i => !i.Cancelled && i.ProjectId == projectId && i.Month == month);
+			// The month is matched here rather than in the query: dates are stored
+			// as {Year, Month, Day} documents, which the database isn't relied on
+			// to compare.
+			return _invoiceRepo.GetActiveOnProject(projectId)
+				.FirstOrDefault(i => i.Month == month);
 		}
 
 		// The project's time entries in the invoice's month.
 		private List<UserTimeEntry> TimeEntriesFor(Invoice invoice)
 		{
 			DateOnly first = new DateOnly(invoice.Month.Year, invoice.Month.Month, 1);
-			return _timeEntryRepo.GetAll()
-				.Where(e => e.ProjectId == invoice.ProjectId && e.Date >= first && e.Date <= invoice.Month)
+			return _timeEntryRepo.GetByProject(invoice.ProjectId)
+    			.Where(e => e.Date >= first && e.Date <= invoice.Month)
 				.OrderBy(e => e.Date)
 				.Select(UserTimeEntry.From)
 				.ToList();
@@ -494,14 +495,12 @@ namespace sma.plan
 			string projectId = invoice.ProjectId;
 			invoice.BilledAssignments = _assignmentRepo.GetByProject(projectId);
 			invoice.BilledRates = _rateRepo.GetByProject(projectId);
-			invoice.BilledTasks = _taskRepo.GetAll().Where(t => t.ProjectId == projectId).ToList();
+			invoice.BilledTasks = _taskRepo.GetByProjects(new[] { projectId });
 
 			// A sub-task's ProjectId is missing on older records, so its task
 			// decides too.
 			HashSet<string> taskIds = invoice.BilledTasks.Select(t => t.Id).ToHashSet();
-			invoice.BilledSubTasks = _subTaskRepo.GetAll()
-				.Where(s => s.ProjectId == projectId || taskIds.Contains(s.ProjectTaskId))
-				.ToList();
+			invoice.BilledSubTasks = _subTaskRepo.GetInProjects(new[] { projectId }, taskIds);
 		}
 
 		// Copies the expenses the invoice bills, as they are at issue.
@@ -538,7 +537,8 @@ namespace sma.plan
 				}
 				if ((invoice.BilledExpenses?.Count ?? 0) == 0 && ExpenseIdsOf(invoice).Count > 0)
 				{
-					expenses ??= _expenseRepo.GetAll();
+					// Just the expenses these invoices bill, in one read.
+					expenses ??= _expenseRepo.GetByIds(invoices.SelectMany(i => ExpenseIdsOf(i)));
 					CopyBilledExpenses(invoice, expenses);
 				}
 			}

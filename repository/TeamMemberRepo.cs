@@ -14,5 +14,19 @@ namespace sma.plan
 			var filter = Builders<TeamMember>.Filter.Eq(t => t.UserId, userId);
 			return DBCollection.Find(filter).FirstOrDefault();
 		}
+
+		public List<TeamMember> GetByIds(IEnumerable<string> ids)
+		{
+			var filter = Builders<TeamMember>.Filter.In(t => t.Id, ValidIds(ids));
+			return DBCollection.Find(filter).SortBy(t => t.Id).ToList();
+		}
+
+		// AnyEq: the AssignedRoles list contains the id. AssignedRoles holds plain
+		// text, not ObjectIds, so no id check is needed - a bad id just matches nothing.
+		public long CountWithRole(string projectRoleId)
+		{
+			var filter = Builders<TeamMember>.Filter.AnyEq(t => t.AssignedRoles, projectRoleId);
+			return DBCollection.CountDocuments(filter);
+		}
 	}
 }

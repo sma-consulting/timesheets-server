@@ -18,6 +18,9 @@ namespace sma.plan
 		TimeEntry Delete(string id);
 
 		List<TimeEntry> GetAllTimeEntries();
+
+		// The caller's own entries - admins and project managers included.
+		List<TimeEntry> GetOwnTimeEntries();
 		bool MayLogAgainst(string teamMemberId, string projectSubTaskId);
 		bool MayWrite(string timeEntryId);
 		bool MayRead(string timeEntryId);

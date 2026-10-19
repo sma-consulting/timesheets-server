@@ -1,6 +1,7 @@
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace sma.plan
@@ -84,6 +85,32 @@ namespace sma.plan
 				return null;
 			}
 			return DBCollection.Find(i => i.Id == id).FirstOrDefault();
+		}
+
+		public List<Invoice> GetIssuedOnProjects(IEnumerable<string> projectIds)
+		{
+			// Ids that aren't ObjectIds can't match anything, and would throw in a filter.
+			List<string> projects = (projectIds ?? Enumerable.Empty<string>())
+				.Where(id => ObjectId.TryParse(id, out _))
+				.ToList();
+
+			var filter = Builders<Invoice>.Filter.Eq(i => i.Issued, true)
+				& Builders<Invoice>.Filter.In(i => i.ProjectId, projects);
+			return DBCollection.Find(filter).SortBy(i => i.Id).ToList();
+		}
+
+		// Ne ("not true") rather than Eq false, so an invoice saved before
+		// Cancelled existed still counts as not cancelled.
+		public List<Invoice> GetActiveOnProject(string projectId)
+		{
+			if (!ObjectId.TryParse(projectId, out _))
+			{
+				return new List<Invoice>();
+			}
+
+			var filter = Builders<Invoice>.Filter.Eq(i => i.ProjectId, projectId)
+				& Builders<Invoice>.Filter.Ne(i => i.Cancelled, true);
+			return DBCollection.Find(filter).SortBy(i => i.Id).ToList();
 		}
 
 		// The issued, not cancelled invoice that billed a time entry, if any.

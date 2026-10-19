@@ -50,5 +50,51 @@ namespace sma.plan
 		{
 			return DBCollection.CountDocuments(Builders<TimeEntry>.Filter.Eq(e => e.Invoiced, true));
 		}
+
+		// Filtered in the database, so only these entries are loaded rather than
+		// the whole collection.
+		public List<TimeEntry> GetVisibleTo(string teamMemberId, IEnumerable<string> projectIds)
+		{
+			// Ids that aren't ObjectIds can't match anything, and would throw in a filter.
+			List<string> projects = (projectIds ?? Enumerable.Empty<string>())
+				.Where(id => ObjectId.TryParse(id, out _))
+				.ToList();
+
+			var filter = Builders<TimeEntry>.Filter.Eq(e => e.TeamMemberId, teamMemberId)
+				| Builders<TimeEntry>.Filter.In(e => e.ProjectId, projects);
+
+			// Id order: the order GetAll returned them in.
+			return DBCollection.Find(filter).SortBy(e => e.Id).ToList();
+		}
+
+				// Counted by the database: nothing is loaded at all.
+		public long CountLoggedAgainst(IEnumerable<string> projectTaskIds, IEnumerable<string> projectSubTaskIds)
+		{
+			List<string> tasks = (projectTaskIds ?? Enumerable.Empty<string>())
+				.Where(id => ObjectId.TryParse(id, out _))
+				.ToList();
+			List<string> subTasks = (projectSubTaskIds ?? Enumerable.Empty<string>())
+				.Where(id => ObjectId.TryParse(id, out _))
+				.ToList();
+
+			var filter = Builders<TimeEntry>.Filter.In(e => e.ProjectTaskId, tasks)
+				| Builders<TimeEntry>.Filter.In(e => e.ProjectSubTaskId, subTasks);
+
+			return DBCollection.CountDocuments(filter);
+		}
+
+		public List<TimeEntry> GetByProject(string projectId)
+		{
+			if (!ObjectId.TryParse(projectId, out _))
+			{
+				return new List<TimeEntry>();
+			}
+
+			var filter = Builders<TimeEntry>.Filter.Eq(e => e.ProjectId, projectId);
+			return DBCollection.Find(filter).SortBy(e => e.Id).ToList();
+		}
+
+
+
 	}
 }

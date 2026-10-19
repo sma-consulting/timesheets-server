@@ -10,6 +10,9 @@ namespace sma.plan
 		// The project's financials, or null if it has none yet.
 		ProjectFinancials GetByProject(string projectId);
 
+		// The financials of any of the projects.
+		List<ProjectFinancials> GetByProjects(IEnumerable<string> projectIds);
+
 		// Creates the project's financials, or replaces them.
 		ProjectFinancials Save(ProjectFinancials financials);
 

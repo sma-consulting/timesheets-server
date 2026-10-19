@@ -13,5 +13,11 @@ namespace sma.plan
 		Invoice IssuedInvoiceBillingExpense(string expenseId);
 		List<Invoice> GetAll();
 		Tuple<Invoice, Invoice> Update(Invoice data);
+
+		// Issued invoices (sent, paid or cancelled) on any of the projects.
+		List<Invoice> GetIssuedOnProjects(IEnumerable<string> projectIds);
+
+		// The project's invoices that aren't cancelled.
+		List<Invoice> GetActiveOnProject(string projectId);
 	}
 }

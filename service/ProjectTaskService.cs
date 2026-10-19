@@ -53,12 +53,11 @@ namespace sma.plan
 		{
 			_securityService.AuthorizeUser();
 
-			List<ProjectTask> all = _repo.GetAll();
 			HashSet<string> visible = _projectService.VisibleProjectIds();
 
 			return visible == null
-				? all
-				: all.Where(t => visible.Contains(t.ProjectId)).ToList();
+				? _repo.GetAll()
+				: _repo.GetByProjects(visible);
 		}
 	}
 }

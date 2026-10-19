@@ -15,5 +15,8 @@ namespace sma.plan
 		Tuple<ProjectAssignment, ProjectAssignment> Update(ProjectAssignment data);
 		List<ProjectAssignment> GetByProject(string projectId);
 		List<ProjectAssignment> GetByTeamMember(string teamMemberId);
+
+		// How many assignments are in the role.
+		long CountByRole(string projectRoleId);
 	}
 }

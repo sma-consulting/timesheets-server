@@ -60,24 +60,19 @@ namespace sma.plan
 		{
 			_securityService.AuthorizeUser();
 
-			List<ProjectSubTask> all = _repo.GetAll();
 			HashSet<string> visible = _projectService.VisibleProjectIds();
 
 			if (visible == null)
 			{
-				return all;
+				return _repo.GetAll();
 			}
 
-			HashSet<string> visibleTaskIds = _taskRepo
-				.GetAll()
-				.Where(t => visible.Contains(t.ProjectId))
+			List<string> visibleTaskIds = _taskRepo
+				.GetByProjects(visible)
 				.Select(t => t.Id)
-				.ToHashSet();
-
-			return all
-				.Where(s => visibleTaskIds.Contains(s.ProjectTaskId)
-					|| visible.Contains(s.ProjectId))
 				.ToList();
+
+			return _repo.GetInProjects(visible, visibleTaskIds);
 		}
 	}
 }

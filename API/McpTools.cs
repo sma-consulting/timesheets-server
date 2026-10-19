@@ -174,12 +174,12 @@ namespace sma.plan
             {
                 return "The project needs a name.";
             }
-            if (!_customerRepo.GetAll().Any(c => c.Id == clientId))
+            if (!_customerRepo.Exists(clientId))
             {
                 return "There's no client with that id. Use find_client to look it up.";
             }
             if (!string.IsNullOrWhiteSpace(projectManagerId) &&
-                !_teamMemberRepo.GetAll().Any(m => m.Id == projectManagerId))
+                !_teamMemberRepo.Exists(projectManagerId))
             {
                 return "There's no team member with that id. Use find_team_member to look it up.";
             }
@@ -239,11 +239,12 @@ namespace sma.plan
             Dictionary<string, Project> projects = _projectService.GetAllProjects()
                 .Where(p => admin || onTeam.Contains(p.Id))
                 .ToDictionary(p => p.Id);
-            Dictionary<string, ProjectTask> subprojects = _taskRepo.GetAll().ToDictionary(t => t.Id);
+            // Only the subprojects and tasks on those projects are loaded.
+            Dictionary<string, ProjectTask> subprojects = _taskRepo.GetByProjects(projects.Keys).ToDictionary(t => t.Id);
 
             string[] words = (search ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-            var matches = _subTaskRepo.GetAll()
+            var matches = _subTaskRepo.GetInProjects(projects.Keys, subprojects.Keys)
                 .Select(task =>
                 {
                     ProjectTask subproject = task.ProjectTaskId != null && subprojects.TryGetValue(task.ProjectTaskId, out ProjectTask s) ? s : null;
@@ -304,7 +305,7 @@ namespace sma.plan
             }
 
             // The id must be real: a made-up one would break the save.
-            if (string.IsNullOrWhiteSpace(subTaskId) || !_subTaskRepo.GetAll().Any(s => s.Id == subTaskId))
+            if (string.IsNullOrWhiteSpace(subTaskId) || !_subTaskRepo.Exists(subTaskId))
             {
                 return "There's no task with that id. Use find_my_work to look it up.";
             }
@@ -340,7 +341,7 @@ namespace sma.plan
             }
 
             TimeEntry saved = _timeEntryService.Create(entry);
-            return $"Logged {HoursText(saved.Hours)}h on {Describe(saved, WorkNames())} for {DayText(saved.Date)} (entry id {saved.Id}).";
+            return $"Logged {HoursText(saved.Hours)}h on {Describe(saved, WorkNames(saved))} for {DayText(saved.Date)} (entry id {saved.Id}).";
         }
 
         // The caller's own entries between two days, by day, with totals.
@@ -374,11 +375,11 @@ namespace sma.plan
                 return $"Ask for at most {MaxListDays} days at a time.";
             }
 
-            WorkNameLookup names = WorkNames();
-            List<TimeEntry> entries = MyEntries(me)
+            List<TimeEntry> entries = MyEntries()
                 .Where(e => e.Date >= first.Value && e.Date <= last.Value)
                 .OrderBy(e => e.Date)
                 .ToList();
+            WorkNameLookup names = WorkNames(entries.ToArray());
 
             return new
             {
@@ -427,7 +428,7 @@ namespace sma.plan
                 return NotIdentified;
             }
 
-            TimeEntry existing = MyEntries(me).FirstOrDefault(e => e.Id == entryId);
+            TimeEntry existing = MyEntries().FirstOrDefault(e => e.Id == entryId);
             if (existing == null)
             {
                 return NoSuchEntry;
@@ -450,7 +451,7 @@ namespace sma.plan
             if (!string.IsNullOrWhiteSpace(subTaskId))
             {
                 // The id must be real: a made-up one would break the save.
-                if (!_subTaskRepo.GetAll().Any(s => s.Id == subTaskId))
+                if (!_subTaskRepo.Exists(subTaskId))
                 {
                     return "There's no task with that id. Use find_my_work to look it up.";
                 }
@@ -498,7 +499,7 @@ namespace sma.plan
             }
 
             TimeEntry saved = _timeEntryService.Update(changed);
-            return $"Changed the entry to {HoursText(saved.Hours)}h on {Describe(saved, WorkNames())} for {DayText(saved.Date)}.";
+            return $"Changed the entry to {HoursText(saved.Hours)}h on {Describe(saved, WorkNames(saved))} for {DayText(saved.Date)}.";
         }
 
         // Deletes one of the caller's own entries, through the Time Log's own
@@ -517,7 +518,7 @@ namespace sma.plan
                 return NotIdentified;
             }
 
-            TimeEntry existing = MyEntries(me).FirstOrDefault(e => e.Id == entryId);
+            TimeEntry existing = MyEntries().FirstOrDefault(e => e.Id == entryId);
             if (existing == null)
             {
                 return NoSuchEntry;
@@ -534,17 +535,17 @@ namespace sma.plan
                 return locked;
             }
 
-            string what = $"{HoursText(existing.Hours)}h on {Describe(existing, WorkNames())} for {DayText(existing.Date)}";
+            string what = $"{HoursText(existing.Hours)}h on {Describe(existing, WorkNames(existing))} for {DayText(existing.Date)}";
             _timeEntryService.Delete(existing.Id);
             return $"Deleted {what}.";
         }
 
-        // The caller's own time entries. GetAllTimeEntries also gives a project
-        // manager their projects' entries and an admin everyone's, so it's
-        // narrowed to the caller's.
-        private List<TimeEntry> MyEntries(string me)
+        // The caller's own time entries, asked of the database directly. Going
+        // through GetAllTimeEntries loaded everyone's entries for an admin, only
+        // to keep their own.
+        private List<TimeEntry> MyEntries()
         {
-            return _timeEntryService.GetAllTimeEntries().Where(e => e.TeamMemberId == me).ToList();
+            return _timeEntryService.GetOwnTimeEntries();
         }
 
         // Projects, subprojects and tasks by id, for naming where time went.
@@ -555,13 +556,15 @@ namespace sma.plan
             public Dictionary<string, ProjectSubTask> Tasks { get; init; }
         }
 
-        private WorkNameLookup WorkNames()
+        // Only the subprojects and tasks these entries were logged against, not
+        // every one there is. Projects still go by what the caller may see.
+        private WorkNameLookup WorkNames(params TimeEntry[] entries)
         {
             return new WorkNameLookup
             {
                 Projects = _projectService.GetAllProjects().ToDictionary(p => p.Id),
-                Subprojects = _taskRepo.GetAll().ToDictionary(t => t.Id),
-                Tasks = _subTaskRepo.GetAll().ToDictionary(s => s.Id),
+                Subprojects = _taskRepo.GetByIds(entries.Select(e => e.ProjectTaskId)).ToDictionary(t => t.Id),
+                Tasks = _subTaskRepo.GetByIds(entries.Select(e => e.ProjectSubTaskId)).ToDictionary(s => s.Id),
             };
         }
 

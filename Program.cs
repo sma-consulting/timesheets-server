@@ -42,6 +42,7 @@ var host = new HostBuilder()
 		services.AddSingleton<IInvoiceRepo, InvoiceRepo>();
 		services.AddSingleton<IProjectFinancialsRepo, ProjectFinancialsRepo>();
 		services.AddSingleton<IReimbursementBatchRepo, ReimbursementBatchRepo>();
+		services.AddSingleton<IHolidayRepo, HolidayRepo>();
 
 		// Receipt files. Locally a connection string (Azurite) or the storage
 		// URL with your own Azure login; in Azure the account URL plus the
@@ -106,6 +107,22 @@ _ = Task.Run(() =>
 	ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseIndexes");
 	DatabaseIndexes.Ensure((index, ex) =>
 		logger.LogWarning(ex, "Couldn't create the index on {Index}.", index));
+});
+
+// The holidays a new database starts with (see HolidaySeed). In the background,
+// so startup isn't held up; it does nothing once there are holidays.
+_ = Task.Run(() =>
+{
+	try
+	{
+		HolidaySeed.Run(host.Services.GetRequiredService<IHolidayRepo>());
+	}
+	catch (Exception ex)
+	{
+		host.Services.GetRequiredService<ILoggerFactory>()
+			.CreateLogger("HolidaySeed")
+			.LogWarning(ex, "Couldn't add the starting holidays.");
+	}
 });
 
 // Marks time billed on invoices issued before time entries said whether they

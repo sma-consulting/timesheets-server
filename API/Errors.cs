@@ -36,6 +36,24 @@ namespace sma.plan
 				new("timeEntries.notYours", "That entry belongs to another team member.");
 		}
 
+		internal static class Holidays
+		{
+			public static readonly ApiError DateRequired =
+				new("holidays.dateRequired", "A date is required.");
+
+			public static readonly ApiError NameRequired =
+				new("holidays.nameRequired", "A holiday name is required.");
+
+			// The date goes to the frontend as "2026-12-25".
+			public static ApiError DateTaken(DateOnly date) =>
+				new("holidays.dateTaken",
+					$"There's already a holiday on {date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}.",
+					new { date = date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) });
+
+			public static readonly ApiError NotFound =
+				new("holidays.notFound", "That holiday no longer exists.");
+		}
+
 		internal static class Expenses
 		{
 			public static readonly ApiError SignInRequired =

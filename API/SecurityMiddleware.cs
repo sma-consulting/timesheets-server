@@ -16,6 +16,10 @@ namespace sma.plan
 	// function's [Allow] role is met. A function without [Allow] is refused:
 	// endpoints are closed unless they say who may use them.
 	//
+	// Website (HTTP) calls only. Claude's MCP tool calls aren't HTTP requests,
+	// so they pass straight through and each tool in McpTools checks sign-in or
+	// admin for itself; their [Allow(Role.Anyone)] is just a label.
+	//
 	// Refusals use the API's usual envelope - HTTP 200 with the real code in
 	// status.code - which is what the frontend expects from every endpoint.
 	internal class SecurityMiddleware : IFunctionsWorkerMiddleware
@@ -29,7 +33,7 @@ namespace sma.plan
 			HttpContext http = context.GetHttpContext();
 			if (http == null)
 			{
-				// Not an HTTP call; every function here is HTTP, but don't guess.
+				// Not an HTTP call: an MCP tool, which checks access itself.
 				await next(context);
 				return;
 			}

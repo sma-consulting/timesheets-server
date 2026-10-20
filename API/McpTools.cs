@@ -77,8 +77,14 @@ namespace sma.plan
                 ToolInvocationContext context,
             [McpToolProperty("name", "Part of the client's name, e.g. 'VLW'.", isRequired: true)]
                 string name)
-            
         {
+            // Client names are SMA's business, so only for someone signed in.
+            // (MCP calls skip SecurityMiddleware, so the tool checks for itself.)
+            if (_securityService.GetCurrentTeamMemberId() == null)
+            {
+                return NotIdentified;
+            }
+
             return _customerRepo.GetAll()
 				    .Where(c => (c.Name ?? "").Contains(name, StringComparison.OrdinalIgnoreCase))
 				    .Select(c => new { c.Id, c.Name })
@@ -92,6 +98,13 @@ namespace sma.plan
             [McpToolProperty("name", "Part of the person's name, e.g. 'Andriy'.", isRequired: true)]
                 string name)
         {
+            // Staff names, so only for someone signed in. (MCP calls skip
+            // SecurityMiddleware, so the tool checks for itself.)
+            if (_securityService.GetCurrentTeamMemberId() == null)
+            {
+                return NotIdentified;
+            }
+
             return _teamMemberRepo.GetAll()
                 .Where(m => (m.Name ?? "").Contains(name, StringComparison.OrdinalIgnoreCase))
                 .Select(m => new { m.Id, m.Name })

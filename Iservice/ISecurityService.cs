@@ -9,6 +9,8 @@ namespace sma.plan
 {
 	internal interface ISecurityService
 	{
+		// Who's calling, looked up once per request (see Caller).
+		Caller Current { get; }
 
 		string WhoAmI();
 		string GetCurrentEmail();

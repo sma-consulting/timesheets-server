@@ -50,6 +50,10 @@ namespace sma.plan {
 		private HttpContext _httpContext => _request.HttpContext;
 		private ClaimsPrincipal _principal => _request.HttpContext?.User;
 
+		// The caller, once found. One SecurityService per request (scoped), so it
+		// never outlives the request it was looked up for.
+		private Caller _current;
+
 		public SecurityService(RequestContext request, IUserRepo userRepo, ITeamMemberRepo teamMemberRepo)
 		{
 			_request = request;
@@ -57,39 +61,77 @@ namespace sma.plan {
 			_teamMemberRepo = teamMemberRepo;
 		}
 
+		// Who's calling. Looked up on first use and kept for the rest of the
+		// request - saving one time entry asks about ten times. Only a caller who
+		// was found is kept: "nobody" is looked up again next time, so a sign-in
+		// that creates the User part-way through a request is seen straight away.
+		public Caller Current
+		{
+			get
+			{
+				if (_current != null)
+				{
+					return _current;
+				}
+
+				Caller resolved = Resolve();
+				if (resolved != Caller.Nobody)
+				{
+					_current = resolved;
+				}
+				return resolved;
+			}
+		}
+
+		private Caller Resolve()
+		{
+			string email = GetCurrentEmail()?.Trim();
+			if (string.IsNullOrWhiteSpace(email))
+			{
+				return Caller.Nobody;
+			}
+
+			User user = _userRepo.GetByEmail(email);
+			if (user == null)
+			{
+				return Caller.Nobody;
+			}
+
+			// Testing as another role on the sandbox: an admin only as "Admin",
+			// whatever the person really is.
+			string testRole = TestRole();
+
+			return new Caller
+			{
+				Email = email,
+				UserId = user.Id,
+				TeamMemberId = _teamMemberRepo.GetByUserId(user.Id)?.Id,
+				IsAdmin = testRole != null ? testRole == SandboxRoles.Admin : HasAdminPrivilege(user),
+			};
+		}
+
+		// Compared case-insensitively on purpose: privileges are typed into Mongo
+		// by hand, and "Admin" silently failing to grant admin is a very expensive
+		// typo to debug.
+		private static bool HasAdminPrivilege(User user)
+		{
+			return user.Privileges != null &&
+				user.Privileges.Any(p =>
+					string.Equals(p?.Trim(), User.AdminPrivilege, StringComparison.OrdinalIgnoreCase));
+		}
+
 		// The TeamMember representing the caller - what time entries are owned by.
 		// Null when nobody can be identified, or when the User has no TeamMember.
 		public string GetCurrentTeamMemberId()
 		{
-			var email = GetCurrentEmail();
-
-			if (string.IsNullOrWhiteSpace(email))
-			{
-				return null;
-			}
-
-			User user = _userRepo.GetByEmail(email.Trim());
-
-			if (user == null)
-			{
-				return null;
-			}
-
-			return _teamMemberRepo.GetByUserId(user.Id)?.Id;
+			return Current.TeamMemberId;
 		}
 
 		// The caller's User - the login itself, which an admin always has even
 		// without a TeamMember. Null when nobody can be identified.
 		public string GetCurrentUserId()
 		{
-			var email = GetCurrentEmail();
-
-			if (string.IsNullOrWhiteSpace(email))
-			{
-				return null;
-			}
-
-			return _userRepo.GetByEmail(email.Trim())?.Id;
+			return Current.UserId;
 		}
 
 		// Admin is a flag on the User record, resolved from whoever the current
@@ -104,21 +146,14 @@ namespace sma.plan {
 			}
 
 			// Testing as another role on the sandbox: an admin only as "Admin",
-			// whatever the person really is.
+			// whatever the person really is - even before they have a User.
 			string testRole = TestRole();
 			if (testRole != null)
 			{
 				return testRole == SandboxRoles.Admin;
 			}
 
-			User user = _userRepo.GetByEmail(email.Trim());
-
-			// Compared case-insensitively on purpose: privileges are typed into
-			// Mongo by hand, and "Admin" silently failing to grant admin is a very
-			// expensive typo to debug.
-			return user != null && user.Privileges != null &&
-				user.Privileges.Any(p =>
-					string.Equals(p?.Trim(), User.AdminPrivilege, StringComparison.OrdinalIgnoreCase));
+			return Current.IsAdmin;
 		}
 
 		// Easy Auth never runs on localhost, so there is no header to decode while

@@ -73,7 +73,9 @@ var host = new HostBuilder()
 		});
 
 		// service definitions
-		services.AddTransient<ISecurityService, SecurityService>();
+		// Scoped, not transient: one per request, shared by the middleware and
+		// every service, so the caller is looked up once rather than per check.
+		services.AddScoped<ISecurityService, SecurityService>();
 		services.AddScoped<IUserService, UserService>();
 		services.AddScoped<IConfigurationService, ConfigurationService>();
 		services.AddScoped<ITeamMemberService, TeamMemberService>();

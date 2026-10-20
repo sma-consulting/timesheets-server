@@ -96,6 +96,16 @@ if (missing.Count > 0)
 			string.Join(", ", missing));
 }
 
+// Indexes for the fields queries filter by (see DatabaseIndexes). In the
+// background, so startup isn't held up; until they exist the queries still
+// work, just slower.
+_ = Task.Run(() =>
+{
+	ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseIndexes");
+	DatabaseIndexes.Ensure((index, ex) =>
+		logger.LogWarning(ex, "Couldn't create the index on {Index}.", index));
+});
+
 // Marks time billed on invoices issued before time entries said whether they
 // were invoiced. In the background, so startup isn't held up; it does nothing
 // once everything is marked.

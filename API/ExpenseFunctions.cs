@@ -58,7 +58,7 @@ namespace sma.plan
 			string me = _securityService.GetCurrentTeamMemberId();
 			if (string.IsNullOrWhiteSpace(me))
 			{
-				return Forbidden("Sign in to see and submit expenses.");
+				return Forbidden(Errors.Expenses.SignInRequired);
 			}
 
 			return Ok(() => _expenseRepo.GetByTeamMember(me), (e) => new { expenseList = e });
@@ -94,19 +94,19 @@ namespace sma.plan
 			string me = _securityService.GetCurrentTeamMemberId();
 			if (string.IsNullOrWhiteSpace(me))
 			{
-				return Forbidden("Sign in to see and submit expenses.");
+				return Forbidden(Errors.Expenses.SignInRequired);
 			}
 
 			if (!req.HasFormContentType)
 			{
-				return Invalid("Send the expense as a form with its receipt attached.");
+				return Invalid(Errors.Expenses.SendAsFormWithReceipt);
 			}
 
 			IFormCollection form = await req.ReadFormAsync();
 			IFormFile file = form.Files["receipt"];
 
 			Expense expense;
-			string invalid = Parse(form, out expense);
+			ApiError invalid = Parse(form, out expense);
 			if (invalid == null)
 			{
 				invalid = ValidateReceipt(file);
@@ -120,7 +120,7 @@ namespace sma.plan
 			// same projects the form offers. Admins can claim against any.
 			if (!_projectService.MayView(expense.ProjectId))
 			{
-				return Forbidden("You are not assigned to that project.");
+				return Forbidden(Errors.Expenses.NotOnProject);
 			}
 
 			byte[] bytes;
@@ -169,7 +169,7 @@ namespace sma.plan
 			Expense existing = _expenseRepo.Get(id);
 			if (existing == null)
 			{
-				return Invalid("That expense no longer exists.");
+				return Invalid(Errors.Expenses.NotFound);
 			}
 
 			bool admin = _securityService.IsCurrentUserAdmin();
@@ -177,18 +177,18 @@ namespace sma.plan
 
 			if (!admin && !mine)
 			{
-				return Forbidden("That expense belongs to someone else.");
+				return Forbidden(Errors.Expenses.NotYours);
 			}
 			// Approval locks an expense for everyone, admins included; an admin
 			// sends it back to review to unlock it.
 			if (existing.Status == Expense.StatusApproved)
 			{
-				return Invalid("This expense is approved and locked. Send it back to review to change it.");
+				return Invalid(Errors.Expenses.LockedForChange);
 			}
 
 			if (!req.HasFormContentType)
 			{
-				return Invalid("Send the expense as a form.");
+				return Invalid(Errors.Expenses.SendAsForm);
 			}
 
 			IFormCollection form = await req.ReadFormAsync();
@@ -198,11 +198,11 @@ namespace sma.plan
 			// can correct a claim's fields, not the proof behind it.
 			if (file != null && admin)
 			{
-				return Forbidden("Admins can't replace receipts.");
+				return Forbidden(Errors.Expenses.AdminCantReplaceReceipt);
 			}
 
 			Expense changes;
-			string invalid = Parse(form, out changes);
+			ApiError invalid = Parse(form, out changes);
 			if (invalid == null && file != null)
 			{
 				invalid = ValidateReceipt(file);
@@ -214,7 +214,7 @@ namespace sma.plan
 
 			if (!_projectService.MayView(changes.ProjectId))
 			{
-				return Forbidden("You are not assigned to that project.");
+				return Forbidden(Errors.Expenses.NotOnProject);
 			}
 
 			byte[] bytes = null;
@@ -286,17 +286,17 @@ namespace sma.plan
 			Expense expense = _expenseRepo.Get(id);
 			if (expense == null)
 			{
-				return Invalid("That expense no longer exists.");
+				return Invalid(Errors.Expenses.NotFound);
 			}
 
 			string me = _securityService.GetCurrentTeamMemberId();
 			if (!string.IsNullOrWhiteSpace(me) && expense.TeamMemberId == me)
 			{
-				return Forbidden("Another admin must review your own expenses.");
+				return Forbidden(Errors.Expenses.CantReviewOwn);
 			}
 			if (expense.Reimbursed)
 			{
-				return Invalid("This expense has been reimbursed and can't be reviewed again.");
+				return Invalid(Errors.Expenses.AlreadyReimbursed);
 			}
 
 			// Approval is what locks an expense, so an expense billed on an issued
@@ -305,10 +305,7 @@ namespace sma.plan
 			Invoice billedOn = _invoiceRepo.IssuedInvoiceBillingExpense(id);
 			if (billedOn != null)
 			{
-				return Invalid(string.Format(
-					"This expense was billed on invoice {0} ({1}), so it can't be changed. To change it, cancel the invoice first.",
-					billedOn.Number,
-					billedOn.Month.ToString("MMMM yyyy", CultureInfo.InvariantCulture)));
+				return Invalid(Errors.Expenses.BilledOnInvoice(billedOn.Number, billedOn.Month));
 			}
 
 			ReviewRequest review = JsonConvert.DeserializeObject<ReviewRequest>(
@@ -320,11 +317,11 @@ namespace sma.plan
 				status != Expense.StatusRejected &&
 				status != Expense.StatusSubmitted)
 			{
-				return Invalid("Choose approve, reject or back to review.");
+				return Invalid(Errors.Expenses.ChooseReviewAction);
 			}
 			if (status == Expense.StatusRejected && reason.Length == 0)
 			{
-				return Invalid("Give a reason for rejecting the expense.");
+				return Invalid(Errors.Expenses.RejectionReasonRequired);
 			}
 
 			return Ok(
@@ -366,7 +363,7 @@ namespace sma.plan
 			Expense expense = _expenseRepo.Get(id);
 			if (expense == null)
 			{
-				return Invalid("That expense no longer exists.");
+				return Invalid(Errors.Expenses.NotFound);
 			}
 
 			bool admin = _securityService.IsCurrentUserAdmin();
@@ -374,11 +371,11 @@ namespace sma.plan
 
 			if (!admin && !mine)
 			{
-				return Forbidden("That expense belongs to someone else.");
+				return Forbidden(Errors.Expenses.NotYours);
 			}
 			if (expense.Status == Expense.StatusApproved)
 			{
-				return Invalid("This expense is approved and locked. Send it back to review to delete it.");
+				return Invalid(Errors.Expenses.LockedForDelete);
 			}
 
 			return Ok(
@@ -404,7 +401,7 @@ namespace sma.plan
 			Expense expense = _expenseRepo.Get(id);
 			if (expense == null || string.IsNullOrWhiteSpace(expense.ReceiptId))
 			{
-				return Invalid("That receipt no longer exists.");
+				return Invalid(Errors.Expenses.ReceiptNotFound);
 			}
 
 			bool admin = _securityService.IsCurrentUserAdmin();
@@ -413,14 +410,14 @@ namespace sma.plan
 			bool manager = !admin && !mine && _projectService.ManagedProjectIds().Contains(expense.ProjectId);
 			if (!admin && !mine && !manager)
 			{
-				return Forbidden("That expense belongs to someone else.");
+				return Forbidden(Errors.Expenses.NotYours);
 			}
 
 			ExpenseReceipt receipt = _receiptRepo.Find(expense.ReceiptId);
 			Stream file = receipt == null ? null : _receiptRepo.OpenRead(receipt);
 			if (file == null)
 			{
-				return Invalid("That receipt no longer exists.");
+				return Invalid(Errors.Expenses.ReceiptNotFound);
 			}
 
 			// Streamed from storage rather than loaded whole; disposed once sent.
@@ -430,26 +427,26 @@ namespace sma.plan
 
 		// Reads the form into an Expense and checks it. Returns null when it's
 		// valid, otherwise the reason it isn't.
-		private string Parse(IFormCollection form, out Expense expense)
+		private ApiError Parse(IFormCollection form, out Expense expense)
 		{
 			expense = new Expense();
 
 			if (!DateOnly.TryParseExact(form["date"], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly date))
 			{
-				return "A date is required.";
+				return Errors.Expenses.DateRequired;
 			}
 			// A day's grace, so a claim made late in the evening in Canada isn't
 			// refused as "in the future" by a server running on UTC.
 			if (date > DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1))
 			{
-				return "The date can't be in the future.";
+				return Errors.Expenses.DateInFuture;
 			}
 			expense.Date = date;
 
 			string projectId = form["projectId"];
 			if (string.IsNullOrWhiteSpace(projectId) || _projectRepo.Get(projectId) == null)
 			{
-				return "Select a project.";
+				return Errors.Expenses.ProjectRequired;
 			}
 			expense.ProjectId = projectId;
 
@@ -459,7 +456,7 @@ namespace sma.plan
 				ProjectTask task = _taskRepo.Get(taskId);
 				if (task == null || task.ProjectId != projectId)
 				{
-					return "That subproject doesn't belong to the selected project.";
+					return Errors.Expenses.SubprojectNotInProject;
 				}
 				expense.ProjectTaskId = taskId;
 			}
@@ -467,23 +464,23 @@ namespace sma.plan
 			string category = form["category"];
 			if (!Expense.Categories.Contains(category))
 			{
-				return "Select a valid type of expense.";
+				return Errors.Expenses.CategoryInvalid;
 			}
 			expense.Category = category;
 
 			expense.Notes = ((string)form["notes"] ?? "").Trim();
 			if (Expense.NotesRequired.Contains(category) && expense.Notes.Length == 0)
 			{
-				return "Notes are required for meals: say who it was with and why.";
+				return Errors.Expenses.MealNotesRequired;
 			}
 
 			if (!decimal.TryParse(form["amount"], NumberStyles.Number, CultureInfo.InvariantCulture, out decimal amount) || amount <= 0)
 			{
-				return "Enter an amount above 0.";
+				return Errors.Expenses.AmountRequired;
 			}
 			if (decimal.Round(amount, 2) != amount)
 			{
-				return "Use dollars and cents, e.g. 19.99.";
+				return Errors.Expenses.AmountCents;
 			}
 			expense.Amount = amount;
 
@@ -494,22 +491,22 @@ namespace sma.plan
 			return null;
 		}
 
-		private static string ValidateReceipt(IFormFile file)
+		private static ApiError ValidateReceipt(IFormFile file)
 		{
 			if (file == null || file.Length == 0)
 			{
-				return "Attach a receipt or invoice for the expense.";
+				return Errors.Expenses.ReceiptRequired;
 			}
 			if (file.Length > ExpenseReceipt.MaxBytes)
 			{
-				return "The receipt is too large - it must be under 10 MB.";
+				return Errors.Expenses.ReceiptTooLarge;
 			}
 
 			string type = file.ContentType ?? "";
 			if (!type.StartsWith("image/", StringComparison.OrdinalIgnoreCase) &&
 				!string.Equals(type, "application/pdf", StringComparison.OrdinalIgnoreCase))
 			{
-				return "The receipt must be a photo or a PDF.";
+				return Errors.Expenses.ReceiptType;
 			}
 			return null;
 		}

@@ -37,11 +37,7 @@ namespace sma.plan
 
 		private static IActionResult NotSignedIn()
 		{
-			return new OkObjectResult(new
-			{
-				status = new { code = 401, error = "Not signed in." },
-				result = new { },
-			});
+			return new OkObjectResult(Envelope(401, Errors.Auth.NotSignedIn));
 		}
 
 		[Allow(Role.Anyone)]

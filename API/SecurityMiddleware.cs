@@ -45,20 +45,20 @@ namespace sma.plan
 			{
 				context.GetLogger<SecurityMiddleware>().LogWarning(
 					"Refused {Function}: it has no [Allow] role.", context.FunctionDefinition.Name);
-				await Refuse(http, 403, "This action is not available.");
+				await Refuse(http, 403, Errors.Auth.NotAvailable);
 				return;
 			}
 
 			if (required != Role.Anyone &&
 				string.IsNullOrWhiteSpace(security.GetCurrentTeamMemberId()))
 			{
-				await Refuse(http, 401, "Not signed in.");
+				await Refuse(http, 401, Errors.Auth.NotSignedIn);
 				return;
 			}
 
 			if (required == Role.Admin && !security.IsCurrentUserAdmin())
 			{
-				await Refuse(http, 403, "Administrator access is required.");
+				await Refuse(http, 403, Errors.Auth.AdminRequired);
 				return;
 			}
 
@@ -90,14 +90,11 @@ namespace sma.plan
 			return method?.GetCustomAttribute<AllowAttribute>()?.Role;
 		}
 
-		private static Task Refuse(HttpContext http, int code, string message)
+		// The same reply as an endpoint's own refusals (RequestHandler.Envelope).
+		private static Task Refuse(HttpContext http, int code, ApiError error)
 		{
 			http.Response.StatusCode = StatusCodes.Status200OK;
-			return http.Response.WriteAsJsonAsync(new
-			{
-				status = new { code, error = message },
-				result = new { },
-			});
+			return http.Response.WriteAsJsonAsync(RequestHandler.Envelope(code, error));
 		}
 	}
 }

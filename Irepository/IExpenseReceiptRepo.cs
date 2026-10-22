@@ -13,8 +13,8 @@ namespace sma.plan
 		ExpenseReceipt Get(string id);
 		// The receipt, or null if there's none with that id.
 		ExpenseReceipt Find(string id);
-		// The receipt's file, for sending back to the browser; null if the file
-		// is missing from storage.
-		Stream OpenRead(ExpenseReceipt receipt);
+		// A read-only link straight to the receipt's file in blob storage, for
+		// `lifetime`; null if it has no file there.
+		Uri ReadLink(ExpenseReceipt receipt, TimeSpan lifetime);
 	}
 }

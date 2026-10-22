@@ -391,13 +391,43 @@ namespace sma.plan
 		}
 
 
-		// The receipt file itself, for viewing - not the usual JSON envelope,
-		// except when it can't be returned.
+		// A link to the receipt file itself, so the browser loads it straight
+		// from blob storage - to open in a tab, or to draw into a PDF: read-only,
+		// and only for a few minutes, so a link that's passed on soon stops
+		// working.
 		[Allow(Role.SignedIn)]
-		[Function("GetExpenseReceipt")]
-		public async Task<IActionResult> RunGetExpenseReceipt(
-			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "expense/{id}/receipt/")] HttpRequest req, string id)
+		[Function("GetExpenseReceiptLink")]
+		public async Task<IActionResult> RunGetExpenseReceiptLink(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "expense/{id}/receiptLink/")] HttpRequest req, string id)
 		{
+			IActionResult refused = ReceiptFor(id, out ExpenseReceipt receipt);
+			if (refused != null)
+			{
+				return refused;
+			}
+			if (string.IsNullOrWhiteSpace(receipt.BlobName))
+			{
+				return Invalid(Errors.Expenses.ReceiptNotFound);
+			}
+
+			return Ok(
+				() => _receiptRepo.ReadLink(receipt, ReceiptLinkLifetime).ToString(),
+				(url) => new
+				{
+					url,
+					fileName = receipt.FileName,
+				});
+		}
+
+		private static readonly TimeSpan ReceiptLinkLifetime = TimeSpan.FromMinutes(10);
+
+		// The receipt of an expense the caller may open: their own, any for an
+		// admin, or one on a project they manage, whose invoices show it. Null
+		// with the receipt, or the refusal to send instead.
+		private IActionResult ReceiptFor(string id, out ExpenseReceipt receipt)
+		{
+			receipt = null;
+
 			Expense expense = _expenseRepo.Get(id);
 			if (expense == null || string.IsNullOrWhiteSpace(expense.ReceiptId))
 			{
@@ -413,15 +443,8 @@ namespace sma.plan
 				return Forbidden(Errors.Expenses.NotYours);
 			}
 
-			ExpenseReceipt receipt = _receiptRepo.Find(expense.ReceiptId);
-			Stream file = receipt == null ? null : _receiptRepo.OpenRead(receipt);
-			if (file == null)
-			{
-				return Invalid(Errors.Expenses.ReceiptNotFound);
-			}
-
-			// Streamed from storage rather than loaded whole; disposed once sent.
-			return new FileStreamResult(file, receipt.ContentType ?? "application/octet-stream");
+			receipt = _receiptRepo.Find(expense.ReceiptId);
+			return receipt == null ? Invalid(Errors.Expenses.ReceiptNotFound) : null;
 		}
 
 

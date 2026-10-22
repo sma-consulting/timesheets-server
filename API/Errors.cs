@@ -36,6 +36,12 @@ namespace sma.plan
 				new("timeEntries.notYours", "That entry belongs to another team member.");
 		}
 
+		internal static class Projects
+		{
+			public static readonly ApiError PaidTimeOffNotDeletable =
+				new("projects.paidTimeOffNotDeletable", "The paid hours off project can't be deleted: everyone's leave and holidays are logged to it.");
+		}
+
 		internal static class Holidays
 		{
 			public static readonly ApiError DateRequired =

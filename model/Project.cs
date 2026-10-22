@@ -65,6 +65,13 @@ namespace sma.plan
 		// the two can't disagree.
 		public bool Billable { get; set; } = true;
 
+		// "Z Paid Hours Off": the project everyone logs vacation, leave, stat
+		// holidays and lunch breaks to (see PaidTimeOffSeed). Anyone signed in may
+		// log time to it without being assigned, and it can't be deleted. Set
+		// only by the seed - ProjectService keeps it as stored, whatever a save
+		// sends.
+		public bool PaidTimeOff { get; set; }
+
 		public List<ProjectPhase> Phases { get; set; } = new List<ProjectPhase>();
 	}
 }

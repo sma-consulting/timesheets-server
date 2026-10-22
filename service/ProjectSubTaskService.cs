@@ -22,13 +22,19 @@ namespace sma.plan
 			_taskRepo = taskRepo;
 		}
 
+		// Only PaidTimeOffSeed makes the paid hours off tasks, so a new task is
+		// ordinary work, whatever was sent.
 		public ProjectSubTask Create(ProjectSubTask projectSubTask)
 		{
+			projectSubTask.TimeOffType = null;
 			return _repo.Create(projectSubTask);
 		}
 
+		// TimeOffType stays as stored: renaming "Vacation" mustn't stop it
+		// counting as vacation, and no save can turn work into time off.
 		public ProjectSubTask Update(ProjectSubTask projectSubTask)
 		{
+			projectSubTask.TimeOffType = _repo.Get(projectSubTask.Id).TimeOffType;
 			return _repo.Update(projectSubTask).Item2;
 		}
 

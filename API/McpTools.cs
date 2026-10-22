@@ -245,12 +245,13 @@ namespace sma.plan
                 return NotIdentified;
             }
 
-            // The projects they can log to: the ones they're on, or any for an
-            // admin - the same rule as the Time Log (TimeEntryService.MayLogAgainst).
+            // The projects they can log to: the ones they're on, the paid hours off
+            // project, or any for an admin - the same rule as the Time Log
+            // (TimeEntryService.MayLogAgainst).
             bool admin = _securityService.IsCurrentUserAdmin();
             HashSet<string> onTeam = _assignmentRepo.GetByTeamMember(me).Select(a => a.ProjectId).ToHashSet();
             Dictionary<string, Project> projects = _projectService.GetAllProjects()
-                .Where(p => admin || onTeam.Contains(p.Id))
+                .Where(p => admin || p.PaidTimeOff || onTeam.Contains(p.Id))
                 .ToDictionary(p => p.Id);
             // Only the subprojects and tasks on those projects are loaded.
             Dictionary<string, ProjectTask> subprojects = _taskRepo.GetByProjects(projects.Keys).ToDictionary(t => t.Id);

@@ -27,5 +27,13 @@ namespace sma.plan
 			var filter = Builders<Project>.Filter.In(p => p.CustomerId, ValidIds(new[] { customerId }));
 			return DBCollection.CountDocuments(filter);
 		}
+
+		// Eq true: projects saved before the field existed don't have it, and
+		// aren't paid time off.
+		public HashSet<string> IdsPaidTimeOff()
+		{
+			var filter = Builders<Project>.Filter.Eq(p => p.PaidTimeOff, true);
+			return DBCollection.Find(filter).ToList().Select(p => p.Id).ToHashSet();
+		}
 	}
 }

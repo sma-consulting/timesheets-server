@@ -56,6 +56,9 @@ namespace sma.plan
 				.GetByTeamMember(teamMemberId)
 				.Select(a => a.ProjectId)
 				.ToHashSet();
+			// Everyone logs vacation, leave and stat holidays, so everyone sees
+			// the paid hours off project without being assigned to it.
+			visible.UnionWith(PaidTimeOffProjectIds());
 			if (!TestingAsEmployee())
 			{
 				visible.UnionWith(ManagedBy(teamMemberId));
@@ -101,8 +104,16 @@ namespace sma.plan
 			return AssignedProjectIds();
 		}
 
+		public HashSet<string> PaidTimeOffProjectIds()
+		{
+			return _repo.IdsPaidTimeOff();
+		}
+
+		// Only PaidTimeOffSeed makes the paid hours off project, so a new project
+		// is never one, whatever was sent.
 		public Project Create(Project newProject)
 		{
+			newProject.PaidTimeOff = false;
 			return _repo.Create(newProject);
 		}
 
@@ -198,8 +209,12 @@ namespace sma.plan
 			return role ?? _roleRepo.Create(new ProjectRole { Name = "Project Manager", Code = "PM" });
 		}
 
+		// PaidTimeOff stays as stored: the project page doesn't send it, and
+		// saving there mustn't switch the paid hours off project off (or another
+		// project on).
 		public Project Update(Project project)
 		{
+			project.PaidTimeOff = _repo.Get(project.Id).PaidTimeOff;
 			return _repo.Update(project).Item2;
 		}
 

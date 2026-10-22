@@ -25,5 +25,9 @@ namespace sma.plan
 
 		// How many projects belong to the customer.
 		long CountByCustomer(string customerId);
+
+		// The ids of the paid hours off projects (Project.PaidTimeOff) - one, in
+		// practice.
+		HashSet<string> IdsPaidTimeOff();
 	}
 }

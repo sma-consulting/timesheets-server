@@ -109,6 +109,25 @@ _ = Task.Run(() =>
 		logger.LogWarning(ex, "Couldn't create the index on {Index}.", index));
 });
 
+// The paid hours off project and its tasks (see PaidTimeOffSeed). In the
+// background, so startup isn't held up; it adds only what's missing.
+_ = Task.Run(() =>
+{
+	try
+	{
+		PaidTimeOffSeed.Run(
+			host.Services.GetRequiredService<IProjectRepo>(),
+			host.Services.GetRequiredService<IProjectTaskRepo>(),
+			host.Services.GetRequiredService<IProjectSubTaskRepo>());
+	}
+	catch (Exception ex)
+	{
+		host.Services.GetRequiredService<ILoggerFactory>()
+			.CreateLogger("PaidTimeOffSeed")
+			.LogWarning(ex, "Couldn't set up the paid hours off project.");
+	}
+});
+
 // The holidays a new database starts with (see HolidaySeed). In the background,
 // so startup isn't held up; it does nothing once there are holidays.
 _ = Task.Run(() =>

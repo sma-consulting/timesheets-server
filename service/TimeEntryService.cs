@@ -108,6 +108,12 @@ namespace sma.plan
 				return false;
 			}
 
+			// Vacation, leave and stat holidays: anyone, without being assigned.
+			if (_projectService.PaidTimeOffProjectIds().Contains(projectId))
+			{
+				return true;
+			}
+
 			return _assignmentRepo
 				.GetByTeamMember(teamMemberId)
 				.Any(a => a.ProjectId == projectId);

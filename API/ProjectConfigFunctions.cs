@@ -60,6 +60,12 @@ namespace sma.plan
         public async Task<IActionResult> RunDeleteProject(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "project/{id}/")] HttpRequest req, string id)
         {
+            // Everyone's vacation, leave and stat holidays are logged to it.
+            if (_projectService.PaidTimeOffProjectIds().Contains(id))
+            {
+                return Invalid(Errors.Projects.PaidTimeOffNotDeletable);
+            }
+
             return Ok(
                 () =>
                 {

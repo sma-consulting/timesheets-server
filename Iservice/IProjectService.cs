@@ -34,5 +34,8 @@ namespace sma.plan
 
 		// Projects the caller is Project Manager of.
 		HashSet<string> ManagedProjectIds();
+
+		// The paid hours off project(s), which everyone may log time to.
+		HashSet<string> PaidTimeOffProjectIds();
 	}
 }

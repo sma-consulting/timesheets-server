@@ -14,8 +14,14 @@ namespace sma.plan
 		List<Invoice> GetAll();
 		Tuple<Invoice, Invoice> Update(Invoice data);
 
-		// Issued invoices (sent, paid or cancelled) on any of the projects.
-		List<Invoice> GetIssuedOnProjects(IEnumerable<string> projectIds);
+		// Invoices for lists: everything but the copies kept for their reports
+		// (the time entries billed, and the project and expenses as billed). On
+		// the projects, or every project when null; only issued ones (sent, paid
+		// or cancelled) when asked. With a range, only invoices for months in it
+		// (from/to, inclusive; null for open-ended) - plus, with includeOpen,
+		// every invoice still open (not paid, not cancelled) whatever its month.
+		List<Invoice> GetSummaries(IEnumerable<string>? projectIds, bool issuedOnly,
+			DateOnly? from = null, DateOnly? to = null, bool includeOpen = false);
 
 		// The project's invoices that aren't cancelled.
 		List<Invoice> GetActiveOnProject(string projectId);

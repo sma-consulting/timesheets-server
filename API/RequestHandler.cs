@@ -1,6 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -78,6 +80,46 @@ namespace sma.plan
         protected static OkObjectResult NotYours()
         {
             return Forbidden(Errors.TimeEntries.NotYours);
+        }
+
+        // A query-string value (?projectId=...), or null when it's left out or
+        // blank.
+        protected static string QueryValue(HttpRequest req, string name)
+        {
+            string value = req.Query[name];
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        // ?from= and ?to= as dates (yyyy-MM-dd), each null when left out, so a
+        // list can be narrowed to a period. Null when they're fine, otherwise
+        // the reason they aren't.
+        protected static ApiError ReadDateRange(HttpRequest req, out DateOnly? from, out DateOnly? to)
+        {
+            from = null;
+            to = null;
+
+            foreach (string name in new[] { "from", "to" })
+            {
+                string text = QueryValue(req, name);
+                if (text == null)
+                {
+                    continue;
+                }
+                if (!DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly date))
+                {
+                    return Errors.Common.DateInvalid;
+                }
+                if (name == "from")
+                {
+                    from = date;
+                }
+                else
+                {
+                    to = date;
+                }
+            }
+
+            return from > to ? Errors.Common.DateRangeReversed : null;
         }
 
         protected static OkObjectResult Ok(Func<object> repoRequestFunc, Func<object, object> resultFormatFunc)

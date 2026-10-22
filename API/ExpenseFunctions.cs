@@ -50,9 +50,24 @@ namespace sma.plan
 		public async Task<IActionResult> RunGetExpenses(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "expense/")] HttpRequest req)
 		{
+			// Narrowed by ?from=&to= (yyyy-MM-dd) and ?projectId=, so a page gets
+			// only what it shows: the Expenses page a week, an invoice its
+			// project's month.
+			ApiError badDates = ReadDateRange(req, out DateOnly? from, out DateOnly? to);
+			if (badDates != null)
+			{
+				return Invalid(badDates);
+			}
+			string projectId = QueryValue(req, "projectId");
+
 			if (_securityService.IsCurrentUserAdmin())
 			{
-				return Ok(() => _expenseRepo.GetAll(), (e) => new { expenseList = e });
+				// Everyone's, but never the whole collection.
+				if (projectId == null && from == null && to == null)
+				{
+					return Invalid(Errors.Expenses.FilterRequired);
+				}
+				return Ok(() => _expenseRepo.GetFiltered(null, projectId, from, to), (e) => new { expenseList = e });
 			}
 
 			string me = _securityService.GetCurrentTeamMemberId();
@@ -61,27 +76,39 @@ namespace sma.plan
 				return Forbidden(Errors.Expenses.SignInRequired);
 			}
 
-			return Ok(() => _expenseRepo.GetByTeamMember(me), (e) => new { expenseList = e });
+			return Ok(() => _expenseRepo.GetFiltered(me, projectId, from, to), (e) => new { expenseList = e });
 		}
 
 
-		// For the expense report: every expense for an admin; for a project
-		// manager, the expenses on the projects they manage (anyone's, to report
-		// on - not to change); for anyone else, none. The Expenses page keeps
-		// using GetExpenses, so managers still see only their own there.
+		// For the expense report: one project's expenses (?projectId=, required),
+		// in its period (?from=&to=, yyyy-MM-dd; left out for all time). Anyone's
+		// on the project, to report on - not to change: an admin's for any
+		// project, a project manager's for one they manage; anyone else, none.
+		// The Expenses page keeps using GetExpenses, so managers still see only
+		// their own there.
 		[Allow(Role.SignedIn)]
 		[Function("GetReportExpenses")]
 		public async Task<IActionResult> RunGetReportExpenses(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "reportExpense/")] HttpRequest req)
 		{
-			if (_securityService.IsCurrentUserAdmin())
+			string projectId = QueryValue(req, "projectId");
+			if (projectId == null)
 			{
-				return Ok(() => _expenseRepo.GetAll(), (e) => new { expenseList = e });
+				return Invalid(Errors.Expenses.ProjectRequired);
+			}
+			ApiError badDates = ReadDateRange(req, out DateOnly? from, out DateOnly? to);
+			if (badDates != null)
+			{
+				return Invalid(badDates);
 			}
 
-			var managed = _projectService.ManagedProjectIds();
+			if (!_securityService.IsCurrentUserAdmin() && !_projectService.ManagedProjectIds().Contains(projectId))
+			{
+				return Forbidden(Errors.Expenses.NotYourProject);
+			}
+
 			return Ok(
-				() => _expenseRepo.GetByProjects(managed),
+				() => _expenseRepo.GetFiltered(null, projectId, from, to),
 				(e) => new { expenseList = e });
 		}
 

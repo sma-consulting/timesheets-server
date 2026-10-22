@@ -51,6 +51,23 @@ namespace sma.plan
 		}
 
 
+		// The expenses still to be paid back - approved, reimbursable, not yet
+		// reimbursed, whatever their date - for the page's preview of a batch.
+		// The same ones filing checks against.
+		[Allow(Role.Admin)]
+		[Function("GetAwaitingReimbursement")]
+		public async Task<IActionResult> RunGetAwaitingReimbursement(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "reimbursement/awaiting/")] HttpRequest req)
+		{
+			return Ok(
+				() => _expenseRepo.GetAwaitingReimbursement(),
+				(e) => new
+				{
+					expenseList = e
+				});
+		}
+
+
 		// Files the batch for a date. `expenseIds` are the expenses the page
 		// showed: if the batch has changed since (a claim approved or sent back
 		// meanwhile), nothing is filed and the admin checks it again.

@@ -18,6 +18,10 @@ namespace sma.plan
 		// The expenses on any of the projects.
 		List<Expense> GetByProjects(IEnumerable<string> projectIds);
 
+		// The expenses matching every filter given - one team member's, on one
+		// project, dated from/to (inclusive) - each null to leave it out.
+		List<Expense> GetFiltered(string? teamMemberId, string? projectId, DateOnly? from, DateOnly? to);
+
 		// Approved, billable, not yet invoiced - on the projects, or on every
 		// project when projectIds is null.
 		List<Expense> GetUninvoicedBillable(IEnumerable<string>? projectIds);

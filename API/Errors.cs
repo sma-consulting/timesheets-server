@@ -13,6 +13,13 @@ namespace sma.plan
 		{
 			public static readonly ApiError InternalError =
 				new("common.internalError", "Internal server error.");
+
+			// A from/to in a list's query string.
+			public static readonly ApiError DateInvalid =
+				new("common.dateInvalid", "Dates must be written yyyy-MM-dd.");
+
+			public static readonly ApiError DateRangeReversed =
+				new("common.dateRangeReversed", "The start date can't be after the end date.");
 		}
 
 		internal static class Auth
@@ -64,6 +71,13 @@ namespace sma.plan
 		{
 			public static readonly ApiError SignInRequired =
 				new("expenses.signInRequired", "Sign in to see and submit expenses.");
+
+			// An admin listing everyone's expenses must narrow it down.
+			public static readonly ApiError FilterRequired =
+				new("expenses.filterRequired", "Choose a project or dates to list expenses.");
+
+			public static readonly ApiError NotYourProject =
+				new("expenses.notYourProject", "That project isn't one you manage.");
 
 			public static readonly ApiError SendAsFormWithReceipt =
 				new("expenses.sendAsFormWithReceipt", "Send the expense as a form with its receipt attached.");

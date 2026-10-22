@@ -142,18 +142,32 @@ namespace sma.plan
 		}
 
 
-		// Every invoice for an admin. A project manager gets the issued ones -
-		// sent, paid or cancelled, never drafts - on the projects they manage;
-		// anyone else, none.
+		// Invoices for lists, as summaries: everything but the copies kept for
+		// their reports, which come with the invoice itself (GetInvoice).
+		// Narrowed by ?projectId=, ?issued=true, and ?from=&to= (yyyy-MM-dd) on
+		// the month billed - with ?includeOpen=true adding every invoice still
+		// open (not paid, not cancelled) whatever its month, so a range never
+		// hides what's still owed. Any invoice for an admin. A project manager
+		// gets the issued ones - sent, paid or cancelled, never drafts - on the
+		// projects they manage; anyone else, none.
 		[Allow(Role.SignedIn)]
 		[Function("GetAllInvoice")]
 		public async Task<IActionResult> RunGetAllInvoice(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "invoice/")] HttpRequest req)
 		{
+			ApiError badDates = ReadDateRange(req, out DateOnly? from, out DateOnly? to);
+			if (badDates != null)
+			{
+				return Invalid(badDates);
+			}
+			string projectId = QueryValue(req, "projectId");
+			bool issuedOnly = string.Equals(QueryValue(req, "issued"), "true", StringComparison.OrdinalIgnoreCase);
+			bool includeOpen = string.Equals(QueryValue(req, "includeOpen"), "true", StringComparison.OrdinalIgnoreCase);
+
 			if (_securityService.IsCurrentUserAdmin())
 			{
 				return Ok(
-					() => _invoiceRepo.GetAll(),
+					() => _invoiceRepo.GetSummaries(projectId == null ? null : new[] { projectId }, issuedOnly, from, to, includeOpen),
 					(i) => new
 					{
 						invoiceList = i
@@ -161,8 +175,9 @@ namespace sma.plan
 			}
 
 			HashSet<string> managed = _projectService.ManagedProjectIds();
+			IEnumerable<string> theirs = projectId == null ? managed : managed.Where(id => id == projectId);
 			return Ok(
-				() => WithBilledCopies(_invoiceRepo.GetIssuedOnProjects(managed)),
+				() => _invoiceRepo.GetSummaries(theirs, issuedOnly: true, from, to, includeOpen),
 				(i) => new
 				{
 					invoiceList = i

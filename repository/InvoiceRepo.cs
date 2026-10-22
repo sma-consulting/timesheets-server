@@ -87,16 +87,51 @@ namespace sma.plan
 			return DBCollection.Find(i => i.Id == id).FirstOrDefault();
 		}
 
-		public List<Invoice> GetIssuedOnProjects(IEnumerable<string> projectIds)
+		public List<Invoice> GetSummaries(IEnumerable<string>? projectIds, bool issuedOnly,
+			DateOnly? from = null, DateOnly? to = null, bool includeOpen = false)
 		{
-			// Ids that aren't ObjectIds can't match anything, and would throw in a filter.
-			List<string> projects = (projectIds ?? Enumerable.Empty<string>())
-				.Where(id => ObjectId.TryParse(id, out _))
-				.ToList();
+			var f = Builders<Invoice>.Filter;
+			var filter = f.Empty;
+			if (projectIds != null)
+			{
+				filter &= f.In(i => i.ProjectId, ValidIds(projectIds));
+			}
+			if (issuedOnly)
+			{
+				filter &= f.Eq(i => i.Issued, true);
+			}
 
-			var filter = Builders<Invoice>.Filter.Eq(i => i.Issued, true)
-				& Builders<Invoice>.Filter.In(i => i.ProjectId, projects);
-			return DBCollection.Find(filter).SortBy(i => i.Id).ToList();
+			// Still open: neither paid nor cancelled. Ne ("not true"), so an
+			// invoice saved before those flags existed still counts as open.
+			var open = f.Ne(i => i.Paid, true) & f.Ne(i => i.Cancelled, true);
+			bool ranged = from != null || to != null;
+			if (ranged)
+			{
+				var inRange = DateBetween(nameof(Invoice.Month), from, to);
+				filter &= includeOpen ? f.Or(inRange, open) : inRange;
+			}
+
+			// Left out with a plain { field: 0 } projection, which Cosmos handles
+			// as MongoDB does. They read back as empty lists.
+			var withoutCopies = Builders<Invoice>.Projection
+				.Exclude(i => i.TimeEntries)
+				.Exclude(i => i.BilledAssignments)
+				.Exclude(i => i.BilledRates)
+				.Exclude(i => i.BilledTasks)
+				.Exclude(i => i.BilledSubTasks)
+				.Exclude(i => i.BilledExpenses);
+
+			List<Invoice> found = DBCollection.Find(filter).SortBy(i => i.Id).Project<Invoice>(withoutCopies).ToList();
+			if (!ranged)
+			{
+				return found;
+			}
+
+			// The exact range: the query narrows by month (see DateBetween).
+			return found
+				.Where(i => (from == null || i.Month >= from.Value) && (to == null || i.Month <= to.Value)
+					|| (includeOpen && !i.Paid && !i.Cancelled))
+				.ToList();
 		}
 
 		// Ne ("not true") rather than Eq false, so an invoice saved before

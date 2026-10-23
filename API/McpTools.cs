@@ -27,6 +27,9 @@ namespace sma.plan
         private const string NoSuchEntry =
             "You have no time entry with that id. Use list_my_time to find it.";
 
+        private const string FinishedSubproject =
+            "That task's subproject is marked finished, so no new time can go to it. Use find_my_work to pick another.";
+
         private readonly ICustomerRepo _customerRepo;
         private readonly ITeamMemberRepo _teamMemberRepo;
         private readonly IProjectService _projectService;
@@ -268,6 +271,8 @@ namespace sma.plan
                     return new { task, subproject, project };
                 })
                 .Where(m => m.project != null && m.subproject != null)
+                // A finished subproject takes no new time, as on the Time Log.
+                .Where(m => m.subproject.Active)
                 .Where(m => words.All(w =>
                     $"{m.project.Name} {m.project.FundingCode} {m.subproject.Name} {m.task.Name}"
                         .Contains(w, StringComparison.OrdinalIgnoreCase)))
@@ -322,6 +327,10 @@ namespace sma.plan
             if (string.IsNullOrWhiteSpace(subTaskId) || !_subTaskRepo.Exists(subTaskId))
             {
                 return "There's no task with that id. Use find_my_work to look it up.";
+            }
+            if (!SubprojectActive(subTaskId))
+            {
+                return FinishedSubproject;
             }
             if (!TryReadDate(date, out DateOnly? day) || day == null)
             {
@@ -469,6 +478,10 @@ namespace sma.plan
                 {
                     return "There's no task with that id. Use find_my_work to look it up.";
                 }
+                if (subTaskId != existing.ProjectSubTaskId && !SubprojectActive(subTaskId))
+                {
+                    return FinishedSubproject;
+                }
                 changed.ProjectSubTaskId = subTaskId;
             }
             if (!string.IsNullOrWhiteSpace(date))
@@ -568,6 +581,14 @@ namespace sma.plan
             public Dictionary<string, Project> Projects { get; init; }
             public Dictionary<string, ProjectTask> Subprojects { get; init; }
             public Dictionary<string, ProjectSubTask> Tasks { get; init; }
+        }
+
+        // Whether a task's subproject is still under way; a finished one takes
+        // no new time. A task with no subproject goes by the project alone.
+        private bool SubprojectActive(string subTaskId)
+        {
+            string subprojectId = _subTaskRepo.Get(subTaskId)?.ProjectTaskId;
+            return subprojectId == null || _taskRepo.Get(subprojectId)?.Active != false;
         }
 
         // Only the subprojects and tasks these entries were logged against, not

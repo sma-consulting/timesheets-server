@@ -21,6 +21,11 @@ namespace sma.plan
 
 		public string ShortName { get; set; }
 
+		// False once it's finished: it keeps its time, reports and invoices, but
+		// new time and expenses can't be booked to it. Tasks saved before there
+		// was a flag load as active.
+		public bool Active { get; set; } = true;
+
 		// No FundingCode: only the project has a code (Project.FundingCode).
 		// No Billable here: whether time is billable is set on each sub-task
 		// (ProjectSubTask.Billable), the level the invoice prices at. Tasks saved

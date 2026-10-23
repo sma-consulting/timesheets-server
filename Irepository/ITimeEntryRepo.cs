@@ -34,6 +34,11 @@ namespace sma.plan
 		// Every entry on the project.
 		List<TimeEntry> GetByProject(string projectId);
 
+		// Everyone's entries between two days (inclusive), with only what adding
+		// up hours needs: who, the project and sub-task, the day and the hours.
+		// The notes and the edit history aren't loaded.
+		List<TimeEntry> GetHoursBetween(DateOnly from, DateOnly to);
+
 
 	}
 }

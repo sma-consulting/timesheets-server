@@ -94,6 +94,23 @@ namespace sma.plan
 			return DBCollection.Find(filter).SortBy(e => e.Id).ToList();
 		}
 
+		public List<TimeEntry> GetHoursBetween(DateOnly from, DateOnly to)
+		{
+			var hoursOnly = Builders<TimeEntry>.Projection
+				.Include(e => e.TeamMemberId)
+				.Include(e => e.ProjectId)
+				.Include(e => e.ProjectSubTaskId)
+				.Include(e => e.Date)
+				.Include(e => e.Hours);
+
+			// The exact range: the query narrows by month (see DateBetween).
+			return DBCollection.Find(DateBetween(nameof(TimeEntry.Date), from, to))
+				.Project<TimeEntry>(hoursOnly)
+				.ToList()
+				.Where(e => e.Date >= from && e.Date <= to)
+				.ToList();
+		}
+
 
 
 	}

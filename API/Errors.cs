@@ -22,6 +22,16 @@ namespace sma.plan
 				new("common.dateRangeReversed", "The start date can't be after the end date.");
 		}
 
+		// Loading test data (DevSeed).
+		internal static class Dev
+		{
+			public static readonly ApiError SeedOff =
+				new("dev.seedOff", "Test data can only be loaded into a database whose name ends in LOADTEST, with ENABLE_DEV_SEED on.");
+
+			public static readonly ApiError SeedOptions =
+				new("dev.seedOptions", $"Choose 1 to {DevSeed.MaxPeople} people and 1 to {DevSeed.MaxYears} years.");
+		}
+
 		internal static class Auth
 		{
 			public static readonly ApiError NotSignedIn =
@@ -65,6 +75,15 @@ namespace sma.plan
 
 			public static readonly ApiError NotFound =
 				new("holidays.notFound", "That holiday no longer exists.");
+		}
+
+		internal static class StaffHours
+		{
+			public static readonly ApiError RangeRequired =
+				new("staffHours.rangeRequired", "Choose the days to add up: from and to.");
+
+			public static readonly ApiError RangeTooLong =
+				new("staffHours.rangeTooLong", $"Choose at most {StaffHoursFunctions.MaxDays} days.", new { days = StaffHoursFunctions.MaxDays });
 		}
 
 		internal static class Expenses

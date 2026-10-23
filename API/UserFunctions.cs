@@ -64,6 +64,9 @@ namespace sma.plan
 					isAdmin = testRole != null ? _securityService.IsCurrentUserAdmin() : _userService.IsAdmin(email),
 					roleSwitch = _securityService.RoleSwitchEnabled(),
 					testRole,
+					// Whether the app offers to load test data, and into which database.
+					devSeed = DevSeed.Enabled(),
+					devSeedDatabase = DevSeed.Enabled() ? DevSeed.DatabaseName() : null,
 				});
 		}
 
@@ -93,6 +96,8 @@ namespace sma.plan
 					isAdmin = testRole != null ? testRole == SandboxRoles.Admin : _userService.IsAdmin(login.Email),
 					roleSwitch = _securityService.RoleSwitchEnabled(),
 					testRole,
+					devSeed = DevSeed.Enabled(),
+					devSeedDatabase = DevSeed.Enabled() ? DevSeed.DatabaseName() : null,
 				});
 		}
 

@@ -19,6 +19,10 @@ namespace sma.plan
 
 		List<TimeEntry> GetAllTimeEntries();
 
+		// Out of those GetAllTimeEntries would give, the ones for a person,
+		// project and/or days - a null one doesn't narrow - without their history.
+		List<TimeEntry> GetTimeEntries(string teamMemberId, string projectId, DateOnly? from, DateOnly? to);
+
 		// The caller's own entries - admins and project managers included.
 		List<TimeEntry> GetOwnTimeEntries();
 		bool MayLogAgainst(string teamMemberId, string projectSubTaskId);

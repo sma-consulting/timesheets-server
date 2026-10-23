@@ -138,13 +138,27 @@ namespace sma.plan
 		}
 
 
+		// timeEntry/?teamMemberId=&projectId=&from=&to= - any of them, to get
+		// only what a page shows. With none, everything the caller may see, as
+		// before, for the pages not yet asking for less.
 		[Allow(Role.SignedIn)]
 		[Function("GetAllTimeEntry")]
 		public async Task<IActionResult> RunGetAllTimeEntry(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "timeEntry/")] HttpRequest req)
 		{
+			ApiError badDates = ReadDateRange(req, out DateOnly? from, out DateOnly? to);
+			if (badDates != null)
+			{
+				return Invalid(badDates);
+			}
+			string teamMemberId = QueryValue(req, "teamMemberId");
+			string projectId = QueryValue(req, "projectId");
+			bool filtered = teamMemberId != null || projectId != null || from != null || to != null;
+
 			return Ok(
-				() => _timeEntryService.GetAllTimeEntries(),
+				() => filtered
+					? _timeEntryService.GetTimeEntries(teamMemberId, projectId, from, to)
+					: _timeEntryService.GetAllTimeEntries(),
 				(t) => new
 				{
 					timeEntryList = t

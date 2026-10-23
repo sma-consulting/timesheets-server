@@ -67,6 +67,40 @@ namespace sma.plan
 			return DBCollection.Find(filter).SortBy(e => e.Id).ToList();
 		}
 
+		public List<TimeEntry> GetFiltered(string teamMemberId, string projectId, DateOnly? from, DateOnly? to,
+			string visibleTo, IEnumerable<string> visibleProjectIds)
+		{
+			var f = Builders<TimeEntry>.Filter;
+			var filter = DateBetween(nameof(TimeEntry.Date), from, to);
+
+			foreach ((string id, bool isMember) in new[] { (teamMemberId, true), (projectId, false) })
+			{
+				if (id == null)
+				{
+					continue;
+				}
+				// An id that isn't an ObjectId can't match, and would throw in a filter.
+				if (!ObjectId.TryParse(id, out _))
+				{
+					return new List<TimeEntry>();
+				}
+				filter &= isMember ? f.Eq(e => e.TeamMemberId, id) : f.Eq(e => e.ProjectId, id);
+			}
+
+			if (visibleTo != null)
+			{
+				filter &= f.Eq(e => e.TeamMemberId, visibleTo) | f.In(e => e.ProjectId, ValidIds(visibleProjectIds));
+			}
+
+			// The pages don't use the history, and it can be most of an entry.
+			var withoutHistory = Builders<TimeEntry>.Projection.Exclude(e => e.History);
+
+			// The exact range: the query narrows by month (see DateBetween).
+			return DBCollection.Find(filter).SortBy(e => e.Id).Project<TimeEntry>(withoutHistory).ToList()
+				.Where(e => (from == null || e.Date >= from.Value) && (to == null || e.Date <= to.Value))
+				.ToList();
+		}
+
 				// Counted by the database: nothing is loaded at all.
 		public long CountLoggedAgainst(IEnumerable<string> projectTaskIds, IEnumerable<string> projectSubTaskIds)
 		{

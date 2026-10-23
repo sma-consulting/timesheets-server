@@ -27,6 +27,13 @@ namespace sma.plan
 		
 		// The team member's own entries, plus everyone's on the given projects.
 		List<TimeEntry> GetVisibleTo(string teamMemberId, IEnumerable<string> projectIds);
+
+		// The entries matching every filter given - a null one doesn't narrow -
+		// without their edit history. With `visibleTo` set, only that team
+		// member's own entries and those on `visibleProjectIds` (someone who
+		// isn't an admin); null leaves them all in.
+		List<TimeEntry> GetFiltered(string teamMemberId, string projectId, DateOnly? from, DateOnly? to,
+			string visibleTo, IEnumerable<string> visibleProjectIds);
 				
 		// How many entries are logged against any of the tasks or sub-tasks.
 		long CountLoggedAgainst(IEnumerable<string> projectTaskIds, IEnumerable<string> projectSubTaskIds);

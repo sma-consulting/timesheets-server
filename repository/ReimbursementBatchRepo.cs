@@ -1,4 +1,5 @@
 using MongoDB.Driver;
+using System.Collections.Generic;
 
 namespace sma.plan
 {
@@ -9,6 +10,15 @@ namespace sma.plan
 			return string.IsNullOrWhiteSpace(id)
 				? null
 				: DBCollection.Find(b => b.Id == id).FirstOrDefault();
+		}
+
+		public List<ReimbursementBatch> GetWithoutExpenses()
+		{
+			var withoutExpenses = Builders<ReimbursementBatch>.Projection
+				.Exclude(nameof(ReimbursementBatch.People) + "." + nameof(ReimbursementPerson.Expenses));
+			return DBCollection.Find(Builders<ReimbursementBatch>.Filter.Empty)
+				.Project<ReimbursementBatch>(withoutExpenses)
+				.ToList();
 		}
 	}
 }

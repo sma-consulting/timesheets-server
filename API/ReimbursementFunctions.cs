@@ -36,17 +36,52 @@ namespace sma.plan
 			_securityService = securityService;
 		}
 
-		// Every filed batch, newest first, voided ones included.
+		// Every filed batch, newest first, voided ones included - as the page's
+		// list shows it, without anyone's expenses, which are most of a batch.
+		// A batch in full, to print it, comes from reimbursement/{id}/.
 		[Allow(Role.Admin)]
 		[Function("GetReimbursementBatches")]
 		public async Task<IActionResult> RunGetReimbursementBatches(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "reimbursement/")] HttpRequest req)
 		{
 			return Ok(
-				() => _batchRepo.GetAll().OrderByDescending(b => b.FiledAt).ToList(),
+				() => _batchRepo.GetWithoutExpenses()
+					.OrderByDescending(b => b.FiledAt)
+					.Select(b => new
+					{
+						id = b.Id,
+						batchDate = b.BatchDate,
+						filedAt = b.FiledAt,
+						total = b.Total,
+						count = b.Count,
+						peopleCount = b.People.Count,
+						voided = b.Voided,
+					})
+					.ToList(),
 				(b) => new
 				{
 					batchList = b
+				});
+		}
+
+
+		// One filed batch in full - each person's expenses - to print it.
+		[Allow(Role.Admin)]
+		[Function("GetReimbursementBatch")]
+		public async Task<IActionResult> RunGetReimbursementBatch(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "reimbursement/{id}/")] HttpRequest req, string id)
+		{
+			ReimbursementBatch batch = _batchRepo.Find(id);
+			if (batch == null)
+			{
+				return Invalid("That batch no longer exists.");
+			}
+
+			return Ok(
+				() => batch,
+				(b) => new
+				{
+					batch = b
 				});
 		}
 

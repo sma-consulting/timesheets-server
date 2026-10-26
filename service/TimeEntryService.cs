@@ -304,28 +304,8 @@ namespace sma.plan
 		// Admins see every timesheet so they can review and correct them. Everyone
 		// else sees their own, plus - for Project Managers - their projects'
 		// entries. An unresolved caller sees nothing rather than everything -
-		// failing closed matters more here than a helpful fallback.
-		public List<TimeEntry> GetAllTimeEntries()
-		{
-			if (_securityService.IsCurrentUserAdmin())
-			{
-				return _repo.GetAll();
-			}
-
-			string callerTeamMemberId = _securityService.GetCurrentTeamMemberId();
-
-			if (string.IsNullOrWhiteSpace(callerTeamMemberId))
-			{
-				return new List<TimeEntry>();
-			}
-
-			// Project Managers also get everyone's entries on the projects they
-			// manage, so they can review them. MayWrite keeps those read-only.
-			return _repo.GetVisibleTo(callerTeamMemberId, _projectService.ManagedProjectIds());
-		}
-
-		// The same rules as GetAllTimeEntries, but asked of the database with the
-		// page's filters, so only what it shows is read.
+		// failing closed matters more here than a helpful fallback. Asked of the
+		// database with the page's filters, so only what it shows is read.
 		public List<TimeEntry> GetTimeEntries(string teamMemberId, string projectId, DateOnly? from, DateOnly? to)
 		{
 			if (_securityService.IsCurrentUserAdmin())
@@ -340,11 +320,13 @@ namespace sma.plan
 				return new List<TimeEntry>();
 			}
 
+			// Project Managers also get everyone's entries on the projects they
+			// manage, so they can review them. MayWrite keeps those read-only.
 			return _repo.GetFiltered(teamMemberId, projectId, from, to,
 				callerTeamMemberId, _projectService.ManagedProjectIds());
 		}
 
-		// Unlike GetAllTimeEntries, never anyone else's: an admin gets their own
+		// Unlike GetTimeEntries, never anyone else's: an admin gets their own
 		// entries here, not everyone's.
 		public List<TimeEntry> GetOwnTimeEntries()
 		{

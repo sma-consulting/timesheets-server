@@ -138,9 +138,9 @@ namespace sma.plan
 		}
 
 
-		// timeEntry/?teamMemberId=&projectId=&from=&to= - any of them, to get
-		// only what a page shows. With none, everything the caller may see, as
-		// before, for the pages not yet asking for less.
+		// timeEntry/?teamMemberId=&projectId=&from=&to= - at least one, so a page
+		// gets only what it shows. Unfiltered, an admin would get every entry
+		// there is, which grows by thousands a month.
 		[Allow(Role.SignedIn)]
 		[Function("GetAllTimeEntry")]
 		public async Task<IActionResult> RunGetAllTimeEntry(
@@ -153,12 +153,13 @@ namespace sma.plan
 			}
 			string teamMemberId = QueryValue(req, "teamMemberId");
 			string projectId = QueryValue(req, "projectId");
-			bool filtered = teamMemberId != null || projectId != null || from != null || to != null;
+			if (teamMemberId == null && projectId == null && from == null && to == null)
+			{
+				return Invalid(Errors.TimeEntries.FilterRequired);
+			}
 
 			return Ok(
-				() => filtered
-					? _timeEntryService.GetTimeEntries(teamMemberId, projectId, from, to)
-					: _timeEntryService.GetAllTimeEntries(),
+				() => _timeEntryService.GetTimeEntries(teamMemberId, projectId, from, to),
 				(t) => new
 				{
 					timeEntryList = t

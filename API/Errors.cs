@@ -51,6 +51,9 @@ namespace sma.plan
 
 			public static readonly ApiError NotYours =
 				new("timeEntries.notYours", "That entry belongs to another team member.");
+
+			public static readonly ApiError FilterRequired =
+				new("timeEntries.filterRequired", "Choose a person, a project or dates to list time entries.");
 		}
 
 		internal static class Projects

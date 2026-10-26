@@ -27,6 +27,31 @@ namespace sma.plan
 
 			// Which projects someone manages - checked on most PM requests.
 			On<Project>(warn, p => p.ProjectManagerId);
+
+			// A span of days: Staff hours' month, the Time Log's week, a report's
+			// period, the Invoices page's last 12 months.
+			OnDate<TimeEntry>(warn, nameof(TimeEntry.Date));
+			OnDate<Expense>(warn, nameof(Expense.Date));
+			OnDate<Invoice>(warn, nameof(Invoice.Month));
+		}
+
+		// Dates are stored as { Year, Month, Day } and asked for on those parts
+		// (DatabaseRepo.DateBetween), so one index over the three, in that order.
+		private static void OnDate<T>(Action<string, Exception> warn, string field)
+			where T : GeneralModel
+		{
+			try
+			{
+				Database.GetCollection<T>().Indexes.CreateOne(new CreateIndexModel<T>(
+					Builders<T>.IndexKeys
+						.Ascending(field + ".Year")
+						.Ascending(field + ".Month")
+						.Ascending(field + ".Day")));
+			}
+			catch (Exception ex)
+			{
+				warn(typeof(T).Name + "." + field, ex);
+			}
 		}
 
 		// One index per field, each created on its own so that one failing

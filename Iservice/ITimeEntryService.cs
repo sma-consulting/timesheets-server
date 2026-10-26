@@ -17,10 +17,8 @@ namespace sma.plan
 
 		TimeEntry Delete(string id);
 
-		List<TimeEntry> GetAllTimeEntries();
-
-		// Out of those GetAllTimeEntries would give, the ones for a person,
-		// project and/or days - a null one doesn't narrow - without their history.
+		// The entries the caller may see for a person, project and/or days - a
+		// null one doesn't narrow - without their history.
 		List<TimeEntry> GetTimeEntries(string teamMemberId, string projectId, DateOnly? from, DateOnly? to);
 
 		// The caller's own entries - admins and project managers included.

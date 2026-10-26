@@ -148,6 +148,16 @@ namespace sma.plan
 			return DBCollection.Find(filter).SortBy(i => i.Id).ToList();
 		}
 
+		public List<Invoice> GetIssuedTimeEntryIds()
+		{
+			var filter = Builders<Invoice>.Filter.Eq(i => i.Issued, true)
+				& Builders<Invoice>.Filter.Ne(i => i.Cancelled, true);
+			var billedIds = Builders<Invoice>.Projection
+				.Include(nameof(Invoice.TimeEntries) + "." + nameof(UserTimeEntry.TimeEntryId));
+
+			return DBCollection.Find(filter).Project<Invoice>(billedIds).ToList();
+		}
+
 		// The issued, not cancelled invoice that billed a time entry, if any.
 		public Invoice IssuedInvoiceBilling(string timeEntryId)
 		{

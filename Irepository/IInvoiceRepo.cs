@@ -25,5 +25,9 @@ namespace sma.plan
 
 		// The project's invoices that aren't cancelled.
 		List<Invoice> GetActiveOnProject(string projectId);
+
+		// The issued invoices that aren't cancelled, with nothing but their id
+		// and the ids of the time entries each billed (TimeEntries[].TimeEntryId).
+		List<Invoice> GetIssuedTimeEntryIds();
 	}
 }

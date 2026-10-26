@@ -11,9 +11,9 @@ namespace sma.plan
 	{
 		public static void Run(IInvoiceRepo invoiceRepo, ITimeEntryRepo timeEntryRepo)
 		{
-			List<Invoice> issued = invoiceRepo.GetAll()
-				.Where(i => i.Issued && !i.Cancelled)
-				.ToList();
+			// It runs at every start, so it reads only what the check needs - not
+			// every invoice in full.
+			List<Invoice> issued = invoiceRepo.GetIssuedTimeEntryIds();
 
 			Dictionary<string, List<string>> billed = issued.ToDictionary(
 				i => i.Id,

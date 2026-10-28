@@ -30,5 +30,12 @@ namespace sma.plan
 				| Builders<ProjectSubTask>.Filter.In(s => s.ProjectTaskId, ValidIds(projectTaskIds));
 			return DBCollection.Find(filter).SortBy(s => s.Id).ToList();
 		}
+
+		public List<ProjectSubTask> GetTimeOff()
+		{
+			var filter = Builders<ProjectSubTask>.Filter.Ne(s => s.TimeOffType, null);
+			var typeOnly = Builders<ProjectSubTask>.Projection.Include(s => s.TimeOffType);
+			return DBCollection.Find(filter).Project<ProjectSubTask>(typeOnly).ToList();
+		}
 	}
 }

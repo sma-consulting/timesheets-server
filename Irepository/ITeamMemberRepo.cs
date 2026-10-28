@@ -23,5 +23,9 @@ namespace sma.plan
 
 		// How many team members have the role among their AssignedRoles.
 		long CountWithRole(string projectRoleId);
+
+		// The team members with a sign-in (planning placeholders have none), with
+		// only their id, name and user id.
+		List<TeamMember> GetStaff();
 	}
 }

@@ -28,5 +28,14 @@ namespace sma.plan
 			var filter = Builders<TeamMember>.Filter.AnyEq(t => t.AssignedRoles, projectRoleId);
 			return DBCollection.CountDocuments(filter);
 		}
+
+		public List<TeamMember> GetStaff()
+		{
+			var filter = Builders<TeamMember>.Filter.Ne(t => t.UserId, null);
+			var nameOnly = Builders<TeamMember>.Projection
+				.Include(t => t.Name)
+				.Include(t => t.UserId);
+			return DBCollection.Find(filter).Project<TeamMember>(nameOnly).ToList();
+		}
 	}
 }

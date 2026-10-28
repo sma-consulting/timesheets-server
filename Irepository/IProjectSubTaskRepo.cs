@@ -25,5 +25,9 @@ namespace sma.plan
 
 		// The sub-tasks on any of the projects, or under any of the tasks.
 		List<ProjectSubTask> GetInProjects(IEnumerable<string> projectIds, IEnumerable<string> projectTaskIds);
+
+		// The paid hours off sub-tasks - the ones with a TimeOffType - with only
+		// their id and TimeOffType.
+		List<ProjectSubTask> GetTimeOff();
 	}
 }

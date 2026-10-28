@@ -10,9 +10,9 @@ using System.Threading.Tasks;
 namespace sma.plan
 {
 	// The Staff hours page, for admins: each staff member's hours over a span
-	// of days, added up per day, project and kind of time off. Only that span's
-	// entries are read, so the answer stays the same size however much time has
-	// been logged overall.
+	// of days, added up per day, project and kind of time off, with how many
+	// are billed or locked. Only that span's entries are read, so the answer
+	// stays the same size however much time has been logged overall.
 	internal class StaffHoursFunctions : RequestHandler
 	{
 		// A month's page shows the whole weeks around it, so a little over a month.
@@ -62,19 +62,21 @@ namespace sma.plan
 
 		// Staff are the team members with a sign-in; planning placeholders have
 		// none. Everyone's listed, with or without hours.
+		//
+		// Each day's hours say how many are billed on an invoice and how many an
+		// admin locked by hand; an hour that's both counts as billed.
 		private object HoursBetween(DateOnly from, DateOnly to)
 		{
 			// Which kind of time off each paid-hours-off sub-task is - vacation, a
 			// stat holiday... - whatever it's called.
-			Dictionary<string, string> timeOffTypes = _subTaskRepo.GetAll()
-				.Where(s => s.TimeOffType != null)
+			Dictionary<string, string> timeOffTypes = _subTaskRepo.GetTimeOff()
 				.ToDictionary(s => s.Id, s => s.TimeOffType);
 
 			ILookup<string, TimeEntry> byPerson = _timeEntryRepo.GetHoursBetween(from, to)
 				.Where(e => e.TeamMemberId != null)
 				.ToLookup(e => e.TeamMemberId);
 
-			return _teamMemberRepo.GetAll()
+			return _teamMemberRepo.GetStaff()
 				.Where(m => !string.IsNullOrWhiteSpace(m.UserId))
 				.Select(m => new
 				{
@@ -90,6 +92,8 @@ namespace sma.plan
 							date = day.Key.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
 							projectId = day.Key.ProjectId,
 							hours = day.Sum(e => e.Hours),
+							billedHours = day.Where(e => e.Invoiced).Sum(e => e.Hours),
+							lockedHours = day.Where(e => !e.Invoiced && e.LockedAt != null).Sum(e => e.Hours),
 							timeOffType = day.Key.TimeOffType,
 						})
 						.ToList(),

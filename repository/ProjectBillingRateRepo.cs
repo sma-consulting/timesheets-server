@@ -11,6 +11,12 @@ namespace sma.plan
 			return DBCollection.Find(filter).ToList();
 		}
 
+		public List<ProjectBillingRate> GetByProjects(IEnumerable<string> projectIds)
+		{
+			var filter = Builders<ProjectBillingRate>.Filter.In(r => r.ProjectId, ValidIds(projectIds));
+			return DBCollection.Find(filter).ToList();
+		}
+
 		public long CountByRole(string projectRoleId)
 		{
 			var filter = Builders<ProjectBillingRate>.Filter.In(r => r.ProjectRoleId, ValidIds(new[] { projectRoleId }));

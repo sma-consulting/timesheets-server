@@ -6,17 +6,26 @@ using System.Collections.Generic;
 
 namespace sma.plan
 {
-	// A project's invoice for one calendar month. Built on the Invoices page from
-	// the month's hours and expenses, then edited there; what's saved is the
-	// invoice as edited, so its figures never move once it's sent, whatever
-	// happens to the time entries or rates later.
+	// An invoice for one calendar month, to one client: the subprojects it
+	// bills, from one or more of that client's projects. Built on the Invoices
+	// page from the month's hours and expenses, then edited there; what's saved
+	// is the invoice as edited, so its figures never move once it's sent,
+	// whatever happens to the time entries or rates later.
 	internal class Invoice : GeneralModel
 	{
+		// The first of its projects.
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string ProjectId { get; set; }
 
+		// Every project it bills, ProjectId first, and the subprojects it bills
+		// from them. Both empty on invoices made before one could bill several:
+		// those bill all of ProjectId (see AllProjectIds).
+		public List<string> ProjectIds { get; set; } = new List<string>();
+
+		public List<string> ProjectTaskIds { get; set; } = new List<string>();
+
 		// The month billed, kept as its last day: 2026-09-30 is September 2026.
-		// One invoice per project per month, not counting cancelled ones.
+		// A subproject is on one invoice a month, not counting cancelled ones.
 		public DateOnly Month { get; set; }
 
 		// Given by the server when the invoice is first saved: one past the
@@ -106,6 +115,10 @@ namespace sma.plan
 		public List<InvoiceLine> Lines { get; set; } = new List<InvoiceLine>();
 
 		public List<InvoiceTax> Taxes { get; set; } = new List<InvoiceTax>();
+
+		// ProjectIds, or ProjectId alone on an older invoice.
+		public List<string> AllProjectIds() =>
+			ProjectIds != null && ProjectIds.Count > 0 ? ProjectIds : new List<string> { ProjectId };
 	}
 
 	// A row of the invoice table: a person's hours at their rate, the flat
@@ -117,6 +130,11 @@ namespace sma.plan
 	{
 		// The page's own key for the row.
 		public string Id { get; set; }
+
+		// The project the row bills. Empty on older invoices, whose rows are all
+		// the invoice's ProjectId.
+		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public string ProjectId { get; set; }
 
 		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
 		public string Kind { get; set; }
@@ -185,6 +203,10 @@ namespace sma.plan
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string TeamMemberId { get; set; }
 
+		// Empty on older invoices: the invoice's ProjectId.
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string ProjectId { get; set; }
+
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string ProjectTaskId { get; set; }
 
@@ -205,6 +227,7 @@ namespace sma.plan
 			{
 				TimeEntryId = entry.Id,
 				TeamMemberId = entry.TeamMemberId,
+				ProjectId = entry.ProjectId,
 				ProjectTaskId = entry.ProjectTaskId,
 				ProjectSubTaskId = entry.ProjectSubTaskId,
 				Date = entry.Date,

@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 namespace sma.plan
 {
 	// Invoices, made and changed by admins. A project manager may look at the
-	// issued ones on the projects they manage, but not change them. The page
+	// issued ones billing a project they manage, but not change them. The page
 	// sends the invoice as edited; the server alone sets its number, who
 	// created it and when, its status, and the time entries it bills, whatever
 	// the request says.
@@ -66,24 +66,17 @@ namespace sma.plan
 			{
 				return Invalid(invalid);
 			}
-
-			if (!_projectRepo.Exists(invoice.ProjectId))
-			{
-				return Invalid("That project no longer exists.");
-			}
-
-			invoice.Month = LastDayOf(invoice.Month);
-			invalid = SetDates(invoice);
+			invalid = ResolveProjects(invoice, out List<ProjectTask> subprojects);
 			if (invalid != null)
 			{
 				return Invalid(invalid);
 			}
 
-			Invoice other = InvoiceFor(invoice.ProjectId, invoice.Month);
-			if (other != null)
+			invoice.Month = LastDayOf(invoice.Month);
+			invalid = SetDates(invoice) ?? AlreadyInvoiced(invoice, subprojects);
+			if (invalid != null)
 			{
-				return Invalid(string.Format(
-					"This project already has an invoice for {0}: {1}.", MonthName(invoice.Month), other.Number));
+				return Invalid(invalid);
 			}
 
 			invoice.CreatedAt = DateTime.UtcNow;
@@ -110,8 +103,8 @@ namespace sma.plan
 		}
 
 
-		// Any invoice for an admin; for a project manager, an issued one on a
-		// project they manage.
+		// Any invoice for an admin; for a project manager, an issued one billing
+		// a project they manage - the whole invoice, as the client got it.
 		[Allow(Role.SignedIn)]
 		[Function("GetInvoice")]
 		public async Task<IActionResult> RunGetInvoice(
@@ -128,7 +121,8 @@ namespace sma.plan
 			}
 
 			Invoice stored = _invoiceRepo.Find(id);
-			if (stored == null || !stored.Issued || !_projectService.ManagedProjectIds().Contains(stored.ProjectId))
+			HashSet<string> managed = _projectService.ManagedProjectIds();
+			if (stored == null || !stored.Issued || !stored.AllProjectIds().Any(managed.Contains))
 			{
 				return Forbidden("That invoice isn't on a project you manage.");
 			}
@@ -185,8 +179,8 @@ namespace sma.plan
 		}
 
 
-		// Saves changes to a draft. Its project and month, and everything the
-		// server sets, stay as they were.
+		// Saves changes to a draft. What it bills and its month, and everything
+		// the server sets, stay as they were.
 		[Allow(Role.Admin)]
 		[Function("UpdateInvoice")]
 		public async Task<IActionResult> RunUpdateInvoice(
@@ -211,6 +205,8 @@ namespace sma.plan
 			}
 			invoice.Id = id;
 			invoice.ProjectId = stored.ProjectId;
+			invoice.ProjectIds = stored.ProjectIds ?? new List<string>();
+			invoice.ProjectTaskIds = stored.ProjectTaskIds ?? new List<string>();
 			invoice.Month = stored.Month;
 
 			string invalid = Validate(invoice) ?? SetDates(invoice);
@@ -446,10 +442,6 @@ namespace sma.plan
 			{
 				return "The invoice is missing.";
 			}
-			if (string.IsNullOrWhiteSpace(invoice.ProjectId))
-			{
-				return "Choose the project the invoice is for.";
-			}
 			if (invoice.Month == default)
 			{
 				return "Choose the month the invoice is for.";
@@ -481,41 +473,106 @@ namespace sma.plan
 			return null;
 		}
 
-		// The project's invoice for the month, if it has one. Cancelled ones don't
-		// count: cancelling frees the month for a new invoice.
-		private Invoice InvoiceFor(string projectId, DateOnly month)
+		// What a new invoice bills: the subprojects chosen - all of ProjectId's
+		// when none are - and from them its projects, which must exist and, more
+		// than one, all be for the same client. The page's project stays first.
+		// Returns why not, or null.
+		private string ResolveProjects(Invoice invoice, out List<ProjectTask> subprojects)
 		{
-			// The month is matched here rather than in the query: dates are stored
-			// as {Year, Month, Day} documents, which the database isn't relied on
-			// to compare.
-			return _invoiceRepo.GetActiveOnProject(projectId)
-				.FirstOrDefault(i => i.Month == month);
+			List<string> taskIds = (invoice.ProjectTaskIds ?? new List<string>())
+				.Where(id => !string.IsNullOrWhiteSpace(id))
+				.Distinct()
+				.ToList();
+			if (taskIds.Count > 0)
+			{
+				subprojects = _taskRepo.GetByIds(taskIds);
+				if (subprojects.Count != taskIds.Count)
+				{
+					return "One of those subprojects no longer exists.";
+				}
+			}
+			else if (!string.IsNullOrWhiteSpace(invoice.ProjectId))
+			{
+				subprojects = _taskRepo.GetByProjects(new[] { invoice.ProjectId });
+				taskIds = subprojects.Select(t => t.Id).ToList();
+			}
+			else
+			{
+				subprojects = new List<ProjectTask>();
+				return "Choose what the invoice is for.";
+			}
+
+			List<string> projectIds = (subprojects.Count > 0 ? subprojects.Select(t => t.ProjectId) : new[] { invoice.ProjectId })
+				.Where(id => !string.IsNullOrWhiteSpace(id))
+				.Distinct()
+				.OrderBy(id => id == invoice.ProjectId ? 0 : 1)
+				.ToList();
+			List<Project> projects = _projectRepo.GetByIds(projectIds);
+			if (projectIds.Count == 0 || projects.Count != projectIds.Count)
+			{
+				return "That project no longer exists.";
+			}
+			if (projects.Count > 1
+				&& (projects.Any(p => string.IsNullOrWhiteSpace(p.CustomerId))
+					|| projects.Select(p => p.CustomerId).Distinct().Count() > 1))
+			{
+				return "The projects on one invoice must all be for the same client.";
+			}
+
+			invoice.ProjectTaskIds = taskIds;
+			invoice.ProjectIds = projectIds;
+			invoice.ProjectId = projectIds[0];
+			return null;
 		}
 
-		// The project's time entries in the invoice's month.
+		// A subproject is on one invoice a month. Cancelled ones don't count:
+		// cancelling frees the month for a new invoice. Returns why not, or null.
+		private string AlreadyInvoiced(Invoice invoice, List<ProjectTask> subprojects)
+		{
+			Invoice other = _invoiceRepo
+				.ActiveCovering(invoice.Month, invoice.ProjectIds, invoice.ProjectTaskIds, null)
+				.FirstOrDefault();
+			if (other == null)
+			{
+				return null;
+			}
+
+			// An older invoice bills all of its project.
+			bool older = other.ProjectTaskIds == null || other.ProjectTaskIds.Count == 0;
+			ProjectTask taken = subprojects.FirstOrDefault(t =>
+				older ? t.ProjectId == other.ProjectId : other.ProjectTaskIds.Contains(t.Id));
+			return taken == null
+				? string.Format("This project already has an invoice for {0}: {1}.", MonthName(invoice.Month), other.Number)
+				: string.Format("{0} is already on invoice {1} for {2}.", taken.Name, other.Number, MonthName(invoice.Month));
+		}
+
+		// The time an invoice bills: its subprojects' entries in its month - on
+		// an older invoice, all of its project's.
 		private List<UserTimeEntry> TimeEntriesFor(Invoice invoice)
 		{
 			DateOnly first = new DateOnly(invoice.Month.Year, invoice.Month.Month, 1);
-			return _timeEntryRepo.GetByProject(invoice.ProjectId)
-    			.Where(e => e.Date >= first && e.Date <= invoice.Month)
+			List<TimeEntry> entries = invoice.ProjectTaskIds != null && invoice.ProjectTaskIds.Count > 0
+				? _timeEntryRepo.GetOnTasks(invoice.ProjectTaskIds, first, invoice.Month)
+				: _timeEntryRepo.GetFiltered(null, invoice.ProjectId, first, invoice.Month, null, null);
+			return entries
 				.OrderBy(e => e.Date)
 				.Select(UserTimeEntry.From)
 				.ToList();
 		}
 
 		// Copies what priced and grouped the invoice's hours, as it is at issue:
-		// the project's assignments, billing rates, tasks and sub-tasks.
+		// its projects' assignments, billing rates, tasks and sub-tasks.
 		private void CopyBilledProject(Invoice invoice)
 		{
-			string projectId = invoice.ProjectId;
-			invoice.BilledAssignments = _assignmentRepo.GetByProject(projectId);
-			invoice.BilledRates = _rateRepo.GetByProject(projectId);
-			invoice.BilledTasks = _taskRepo.GetByProjects(new[] { projectId });
+			List<string> projectIds = invoice.AllProjectIds();
+			invoice.BilledAssignments = _assignmentRepo.GetByProjects(projectIds);
+			invoice.BilledRates = _rateRepo.GetByProjects(projectIds);
+			invoice.BilledTasks = _taskRepo.GetByProjects(projectIds);
 
 			// A sub-task's ProjectId is missing on older records, so its task
 			// decides too.
 			HashSet<string> taskIds = invoice.BilledTasks.Select(t => t.Id).ToHashSet();
-			invoice.BilledSubTasks = _subTaskRepo.GetInProjects(new[] { projectId }, taskIds);
+			invoice.BilledSubTasks = _subTaskRepo.GetInProjects(projectIds, taskIds);
 		}
 
 		// Copies the expenses the invoice bills, as they are at issue.

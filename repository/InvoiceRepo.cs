@@ -94,7 +94,9 @@ namespace sma.plan
 			var filter = f.Empty;
 			if (projectIds != null)
 			{
-				filter &= f.In(i => i.ProjectId, ValidIds(projectIds));
+				// Any of its projects; an older invoice has ProjectId alone.
+				List<string> ids = ValidIds(projectIds);
+				filter &= f.In(i => i.ProjectId, ids) | f.AnyIn(i => i.ProjectIds, ids);
 			}
 			if (issuedOnly)
 			{
@@ -135,17 +137,31 @@ namespace sma.plan
 		}
 
 		// Ne ("not true") rather than Eq false, so an invoice saved before
-		// Cancelled existed still counts as not cancelled.
-		public List<Invoice> GetActiveOnProject(string projectId)
+		// Cancelled existed still counts as not cancelled. An older invoice, with
+		// no subprojects listed, bills all of its ProjectId.
+		public List<Invoice> ActiveCovering(DateOnly month, IEnumerable<string> projectIds,
+			IEnumerable<string> projectTaskIds, string exceptId)
 		{
-			if (!ObjectId.TryParse(projectId, out _))
+			var f = Builders<Invoice>.Filter;
+			var older = (f.Exists(i => i.ProjectTaskIds, false) | f.Size(i => i.ProjectTaskIds, 0))
+				& f.In(i => i.ProjectId, ValidIds(projectIds));
+			var filter = DateBetween(nameof(Invoice.Month), month, month)
+				& f.Ne(i => i.Cancelled, true)
+				& (f.AnyIn(i => i.ProjectTaskIds, projectTaskIds ?? Enumerable.Empty<string>()) | older);
+			if (ObjectId.TryParse(exceptId, out _))
 			{
-				return new List<Invoice>();
+				filter &= f.Ne(i => i.Id, exceptId);
 			}
 
-			var filter = Builders<Invoice>.Filter.Eq(i => i.ProjectId, projectId)
-				& Builders<Invoice>.Filter.Ne(i => i.Cancelled, true);
-			return DBCollection.Find(filter).SortBy(i => i.Id).ToList();
+			var coverage = Builders<Invoice>.Projection
+				.Include(i => i.Number)
+				.Include(i => i.Month)
+				.Include(i => i.ProjectId)
+				.Include(i => i.ProjectTaskIds);
+			// The exact month: the query narrows by its parts (see DateBetween).
+			return DBCollection.Find(filter).Project<Invoice>(coverage).ToList()
+				.Where(i => i.Month == month)
+				.ToList();
 		}
 
 		public List<Invoice> GetIssuedTimeEntryIds()
@@ -158,18 +174,16 @@ namespace sma.plan
 			return DBCollection.Find(filter).Project<Invoice>(billedIds).ToList();
 		}
 
-		// The issued, not cancelled invoice that billed a time entry, if any.
-		public Invoice IssuedInvoiceBilling(string timeEntryId)
+		public Invoice FindNumber(string id)
 		{
-			if (!ObjectId.TryParse(timeEntryId, out _))
+			if (!ObjectId.TryParse(id, out _))
 			{
 				return null;
 			}
-
-			var filter = Builders<Invoice>.Filter.Eq(i => i.Issued, true)
-				& Builders<Invoice>.Filter.Eq(i => i.Cancelled, false)
-				& Builders<Invoice>.Filter.ElemMatch(i => i.TimeEntries, e => e.TimeEntryId == timeEntryId);
-			return DBCollection.Find(filter).FirstOrDefault();
+			var numberOnly = Builders<Invoice>.Projection
+				.Include(i => i.Number)
+				.Include(i => i.Month);
+			return DBCollection.Find(i => i.Id == id).Project<Invoice>(numberOnly).FirstOrDefault();
 		}
 
 		// The issued, not cancelled invoice that bills an expense, if any.

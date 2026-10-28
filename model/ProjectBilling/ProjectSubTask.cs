@@ -42,5 +42,8 @@ namespace sma.plan
 		public const string Vacation = "vacation";
 		public const string PersonalLeave = "personalLeave";
 		public const string SickLeave = "sickLeave";
+		// Leave without pay: on the paid hours off project all the same, so the
+		// day is accounted for, but kept apart from paid leave.
+		public const string UnpaidLeave = "unpaidLeave";
 	}
 }

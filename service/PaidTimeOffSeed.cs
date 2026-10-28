@@ -4,19 +4,21 @@ using System.Linq;
 namespace sma.plan
 {
 	// Makes sure the paid hours off project is there, at startup: everyone logs
-	// lunch breaks, stat holidays, vacation, personal leave and sick leave to it.
+	// lunch breaks, stat holidays, vacation, personal, sick and unpaid leave to
+	// it.
 	//
 	//   Z Paid Hours Off            non-billable, internal (status SMA)
 	//   └ Paid hours off            its one subproject
 	//     ├ SMA Daily Lunch Break   ┐
-	//     ├ Statutory Holiday       │ one task per TimeOffTypes, every one
-	//     ├ Vacation                │ non-billable
-	//     ├ Personal Leave          │
-	//     └ Sick Leave              ┘
+	//     ├ Statutory Holiday       │
+	//     ├ Vacation                │ one task per TimeOffTypes, every one
+	//     ├ Personal Leave          │ non-billable
+	//     ├ Sick Leave              │
+	//     └ Unpaid Leave            ┘
 	//
 	// Found by its flags, never by name, so renaming any of it is safe. Whatever
-	// is missing is added - a task deleted by mistake comes back at the next
-	// start, since the Staff hours checks rely on all five.
+	// is missing is added - a task deleted by mistake, or a kind added since,
+	// shows up at the next start, since the Staff hours checks rely on them all.
 	internal static class PaidTimeOffSeed
 	{
 		private const string ProjectName = "Z Paid Hours Off";
@@ -29,6 +31,7 @@ namespace sma.plan
 			(TimeOffTypes.Vacation, "Vacation"),
 			(TimeOffTypes.PersonalLeave, "Personal Leave"),
 			(TimeOffTypes.SickLeave, "Sick Leave"),
+			(TimeOffTypes.UnpaidLeave, "Unpaid Leave"),
 		};
 
 		public static void Run(IProjectRepo projects, IProjectTaskRepo tasks, IProjectSubTaskRepo subTasks)
@@ -69,6 +72,18 @@ namespace sma.plan
 					TimeOffType = type,
 				});
 			}
+		}
+
+		// The paid hours off cost codes, by TimeOffTypes - where test data and
+		// imports put leave, holidays and lunch breaks.
+		public static Dictionary<string, ProjectSubTask> ByType(IProjectRepo projects, IProjectTaskRepo tasks, IProjectSubTaskRepo subTasks)
+		{
+			List<string> paidTimeOff = projects.IdsPaidTimeOff().ToList();
+			return subTasks
+				.GetInProjects(paidTimeOff, tasks.GetByProjects(paidTimeOff).Select(t => t.Id))
+				.Where(s => s.TimeOffType != null)
+				.GroupBy(s => s.TimeOffType)
+				.ToDictionary(g => g.Key, g => g.First());
 		}
 	}
 }

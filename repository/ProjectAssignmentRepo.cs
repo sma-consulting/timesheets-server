@@ -15,6 +15,12 @@ namespace sma.plan
 			return DBCollection.Find(filter).ToList();
 		}
 
+		public List<ProjectAssignment> GetByProjects(IEnumerable<string> projectIds)
+		{
+			var filter = Builders<ProjectAssignment>.Filter.In(a => a.ProjectId, ValidIds(projectIds));
+			return DBCollection.Find(filter).ToList();
+		}
+
 		public List<ProjectAssignment> GetByTeamMember(string teamMemberId)
 		{
 			var filter = Builders<ProjectAssignment>.Filter.Eq(a => a.TeamMemberId, teamMemberId);
@@ -25,6 +31,18 @@ namespace sma.plan
 		{
 			var filter = Builders<ProjectAssignment>.Filter.In(a => a.ProjectRoleId, ValidIds(new[] { projectRoleId }));
 			return DBCollection.CountDocuments(filter);
+		}
+
+		// Counted by the database, stopping at the first: nothing is loaded.
+		public bool IsAssigned(string teamMemberId, string projectId)
+		{
+			if (ValidIds(new[] { teamMemberId, projectId }).Count < 2)
+			{
+				return false;
+			}
+			var filter = Builders<ProjectAssignment>.Filter.Eq(a => a.TeamMemberId, teamMemberId)
+				& Builders<ProjectAssignment>.Filter.Eq(a => a.ProjectId, projectId);
+			return DBCollection.CountDocuments(filter, new CountOptions { Limit = 1 }) > 0;
 		}
 	}
 }

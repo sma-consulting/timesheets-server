@@ -30,6 +30,12 @@ namespace sma.plan
 
 			public static readonly ApiError SeedOptions =
 				new("dev.seedOptions", $"Choose 1 to {DevSeed.MaxPeople} people and 1 to {DevSeed.MaxYears} years.");
+
+			public static readonly ApiError HarvestOff =
+				new("dev.harvestOff", "Harvest data can only be imported into a database whose name ends in HARVEST, with ENABLE_DEV_SEED on.");
+
+			public static readonly ApiError HarvestToken =
+				new("dev.harvestToken", "Set HARVEST_TOKEN_FILE to the file holding the Harvest token.");
 		}
 
 		internal static class Auth
@@ -54,6 +60,15 @@ namespace sma.plan
 
 			public static readonly ApiError FilterRequired =
 				new("timeEntries.filterRequired", "Choose a person, a project or dates to list time entries.");
+
+			public static readonly ApiError NotFound =
+				new("timeEntries.notFound", "That time entry no longer exists.");
+
+			public static readonly ApiError LockRange =
+				new("timeEntries.lockRange", "Choose the days to lock or unlock, written yyyy-MM-dd.");
+
+			public static readonly ApiError LockTooLong =
+				new("timeEntries.lockTooLong", $"Lock or unlock at most {TimeEntryFunctions.MaxLockMonths} months at a time.", new { months = TimeEntryFunctions.MaxLockMonths });
 		}
 
 		internal static class Projects

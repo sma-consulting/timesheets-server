@@ -358,7 +358,7 @@ namespace sma.plan
             {
                 return invalid;
             }
-            if (!_timeEntryService.MayLogAgainst(_timeEntryService.OwnerFor(entry), entry.ProjectSubTaskId))
+            if (!_timeEntryService.MayLogAgainst(_timeEntryService.OwnerFor(entry), entry.ProjectId))
             {
                 return NotOnTeam;
             }
@@ -398,8 +398,8 @@ namespace sma.plan
                 return $"Ask for at most {MaxListDays} days at a time.";
             }
 
-            List<TimeEntry> entries = MyEntries()
-                .Where(e => e.Date >= first.Value && e.Date <= last.Value)
+            // Only the caller's own, only those days, asked of the database.
+            List<TimeEntry> entries = _timeEntryService.GetTimeEntries(me, null, first, last)
                 .OrderBy(e => e.Date)
                 .ToList();
             WorkNameLookup names = WorkNames(entries.ToArray());
@@ -451,8 +451,9 @@ namespace sma.plan
                 return NotIdentified;
             }
 
-            TimeEntry existing = MyEntries().FirstOrDefault(e => e.Id == entryId);
-            if (existing == null)
+            // Read once; the checks and the save use it.
+            TimeEntry existing = _timeEntryService.Find(entryId);
+            if (existing == null || existing.TeamMemberId != me)
             {
                 return NoSuchEntry;
             }
@@ -505,7 +506,7 @@ namespace sma.plan
                 changed.Notes = notes.Trim();
             }
 
-            if (!_timeEntryService.MayWrite(changed.Id))
+            if (!_timeEntryService.MayWrite(existing))
             {
                 return "That entry isn't yours, so you can't change it.";
             }
@@ -514,18 +515,18 @@ namespace sma.plan
             {
                 return invalid;
             }
-            // Time billed on an issued invoice stays as it was billed.
-            string locked = _timeEntryService.LockedReason(changed.Id, changed);
+            // Time billed on an issued invoice, or locked by an admin, stays as it is.
+            string locked = _timeEntryService.LockedReason(existing, changed);
             if (locked != null)
             {
                 return locked;
             }
-            if (!_timeEntryService.MayLogAgainst(_timeEntryService.OwnerFor(changed), changed.ProjectSubTaskId))
+            if (!_timeEntryService.MayLogAgainst(_timeEntryService.OwnerFor(changed), changed.ProjectId))
             {
                 return NotOnTeam;
             }
 
-            TimeEntry saved = _timeEntryService.Update(changed);
+            TimeEntry saved = _timeEntryService.Update(changed, existing);
             return $"Changed the entry to {HoursText(saved.Hours)}h on {Describe(saved, WorkNames(saved))} for {DayText(saved.Date)}.";
         }
 
@@ -545,34 +546,27 @@ namespace sma.plan
                 return NotIdentified;
             }
 
-            TimeEntry existing = MyEntries().FirstOrDefault(e => e.Id == entryId);
-            if (existing == null)
+            // Read once; the checks and the delete use it.
+            TimeEntry existing = _timeEntryService.Find(entryId);
+            if (existing == null || existing.TeamMemberId != me)
             {
                 return NoSuchEntry;
             }
 
-            if (!_timeEntryService.MayWrite(existing.Id))
+            if (!_timeEntryService.MayWrite(existing))
             {
                 return "That entry isn't yours, so you can't delete it.";
             }
-            // Time billed on an issued invoice stays as it was billed.
-            string locked = _timeEntryService.LockedReason(existing.Id);
+            // Time billed on an issued invoice, or locked by an admin, stays as it is.
+            string locked = _timeEntryService.LockedReason(existing);
             if (locked != null)
             {
                 return locked;
             }
 
             string what = $"{HoursText(existing.Hours)}h on {Describe(existing, WorkNames(existing))} for {DayText(existing.Date)}";
-            _timeEntryService.Delete(existing.Id);
+            _timeEntryService.Delete(existing);
             return $"Deleted {what}.";
-        }
-
-        // The caller's own time entries, asked of the database directly. Going
-        // through GetAllTimeEntries loaded everyone's entries for an admin, only
-        // to keep their own.
-        private List<TimeEntry> MyEntries()
-        {
-            return _timeEntryService.GetOwnTimeEntries();
         }
 
         // Projects, subprojects and tasks by id, for naming where time went.

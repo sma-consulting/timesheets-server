@@ -20,6 +20,9 @@ namespace sma.plan
 		// The projects with these ids.
 		List<Project> GetByIds(IEnumerable<string> ids);
 
+		// The same projects with only their id and rate list read.
+		List<Project> GetRateListsOf(IEnumerable<string> ids);
+
 		// The ids of the projects the team member is Project Manager of.
 		HashSet<string> IdsManagedBy(string teamMemberId);
 
@@ -29,5 +32,15 @@ namespace sma.plan
 		// The ids of the paid hours off projects (Project.PaidTimeOff) - one, in
 		// practice.
 		HashSet<string> IdsPaidTimeOff();
+
+		// The projects that use a rate list: only their name, code and list.
+		List<Project> GetRateListUse();
+
+		// Points the project at a rate list (null for none), in one update.
+		// False when there's no such project.
+		bool SetRateList(string projectId, string rateListId);
+
+		// How many projects use the rate list.
+		long CountByRateList(string rateListId);
 	}
 }

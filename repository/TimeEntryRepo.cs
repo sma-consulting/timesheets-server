@@ -112,10 +112,15 @@ namespace sma.plan
 		}
 
 		public List<TimeEntry> GetFiltered(string teamMemberId, string projectId, DateOnly? from, DateOnly? to,
-			string visibleTo, IEnumerable<string> visibleProjectIds)
+			string visibleTo, IEnumerable<string> visibleProjectIds, bool brief = false, bool uninvoicedOnly = false)
 		{
 			var f = Builders<TimeEntry>.Filter;
 			var filter = DateBetween(nameof(TimeEntry.Date), from, to);
+			if (uninvoicedOnly)
+			{
+				// "Not true": an entry saved before the flag existed has no field.
+				filter &= f.Ne(e => e.Invoiced, true);
+			}
 
 			foreach ((string id, bool isMember) in new[] { (teamMemberId, true), (projectId, false) })
 			{
@@ -137,10 +142,10 @@ namespace sma.plan
 			}
 
 			// The pages don't use the history, and it can be most of an entry.
-			var withoutHistory = Builders<TimeEntry>.Projection.Exclude(e => e.History);
+			var shown = brief ? HoursOnly : Builders<TimeEntry>.Projection.Exclude(e => e.History);
 
 			// The exact range: the query narrows by month (see DateBetween).
-			return DBCollection.Find(filter).SortBy(e => e.Id).Project<TimeEntry>(withoutHistory).ToList()
+			return DBCollection.Find(filter).SortBy(e => e.Id).Project<TimeEntry>(shown).ToList()
 				.Where(e => (from == null || e.Date >= from.Value) && (to == null || e.Date <= to.Value))
 				.ToList();
 		}
@@ -173,20 +178,23 @@ namespace sma.plan
 				.ToList();
 		}
 
+		// What adding up hours needs: who, the project and sub-task, the day, the
+		// hours, and whether they're billed or locked.
+		private static readonly ProjectionDefinition<TimeEntry> HoursOnly = Builders<TimeEntry>.Projection
+			.Include(e => e.TeamMemberId)
+			.Include(e => e.ProjectId)
+			.Include(e => e.ProjectTaskId)
+			.Include(e => e.ProjectSubTaskId)
+			.Include(e => e.Date)
+			.Include(e => e.Hours)
+			.Include(e => e.Invoiced)
+			.Include(e => e.LockedAt);
+
 		public List<TimeEntry> GetHoursBetween(DateOnly from, DateOnly to)
 		{
-			var hoursOnly = Builders<TimeEntry>.Projection
-				.Include(e => e.TeamMemberId)
-				.Include(e => e.ProjectId)
-				.Include(e => e.ProjectSubTaskId)
-				.Include(e => e.Date)
-				.Include(e => e.Hours)
-				.Include(e => e.Invoiced)
-				.Include(e => e.LockedAt);
-
 			// The exact range: the query narrows by month (see DateBetween).
 			return DBCollection.Find(DateBetween(nameof(TimeEntry.Date), from, to))
-				.Project<TimeEntry>(hoursOnly)
+				.Project<TimeEntry>(HoursOnly)
 				.ToList()
 				.Where(e => e.Date >= from && e.Date <= to)
 				.ToList();

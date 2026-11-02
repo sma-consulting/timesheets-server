@@ -298,11 +298,12 @@ namespace sma.plan
 		// entries. An unresolved caller sees nothing rather than everything -
 		// failing closed matters more here than a helpful fallback. Asked of the
 		// database with the page's filters, so only what it shows is read.
-		public List<TimeEntry> GetTimeEntries(string teamMemberId, string projectId, DateOnly? from, DateOnly? to)
+		public List<TimeEntry> GetTimeEntries(string teamMemberId, string projectId, DateOnly? from, DateOnly? to,
+			bool brief = false, bool uninvoicedOnly = false)
 		{
 			if (_securityService.IsCurrentUserAdmin())
 			{
-				return _repo.GetFiltered(teamMemberId, projectId, from, to, null, null);
+				return _repo.GetFiltered(teamMemberId, projectId, from, to, null, null, brief, uninvoicedOnly);
 			}
 
 			string callerTeamMemberId = _securityService.GetCurrentTeamMemberId();
@@ -315,7 +316,7 @@ namespace sma.plan
 			// Project Managers also get everyone's entries on the projects they
 			// manage, so they can review them. MayWrite keeps those read-only.
 			return _repo.GetFiltered(teamMemberId, projectId, from, to,
-				callerTeamMemberId, _projectService.ManagedProjectIds());
+				callerTeamMemberId, _projectService.ManagedProjectIds(), brief, uninvoicedOnly);
 		}
 	}
 }

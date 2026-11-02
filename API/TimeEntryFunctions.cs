@@ -210,7 +210,9 @@ namespace sma.plan
 
 		// timeEntry/?teamMemberId=&projectId=&from=&to= - at least one, so a page
 		// gets only what it shows. Unfiltered, an admin would get every entry
-		// there is, which grows by thousands a month.
+		// there is, which grows by thousands a month. &brief=true leaves out the
+		// notes, for a report that only adds up hours; &uninvoiced=true, the
+		// entries an issued invoice has billed.
 		[Allow(Role.SignedIn)]
 		[Function("GetAllTimeEntry")]
 		public async Task<IActionResult> RunGetAllTimeEntry(
@@ -227,9 +229,34 @@ namespace sma.plan
 			{
 				return Invalid(Errors.TimeEntries.FilterRequired);
 			}
+			bool brief = QueryValue(req, "brief") == "true";
+			bool uninvoicedOnly = QueryValue(req, "uninvoiced") == "true";
+
+			if (brief)
+			{
+				// Only the fields read, rather than every field mostly empty.
+				return Ok(
+					() => _timeEntryService.GetTimeEntries(teamMemberId, projectId, from, to, true, uninvoicedOnly)
+						.Select(e => new
+						{
+							id = e.Id,
+							teamMemberId = e.TeamMemberId,
+							projectId = e.ProjectId,
+							projectTaskId = e.ProjectTaskId,
+							projectSubTaskId = e.ProjectSubTaskId,
+							date = e.Date,
+							hours = e.Hours,
+							invoiced = e.Invoiced,
+						})
+						.ToList(),
+					(t) => new
+					{
+						timeEntryList = t
+					});
+			}
 
 			return Ok(
-				() => _timeEntryService.GetTimeEntries(teamMemberId, projectId, from, to),
+				() => _timeEntryService.GetTimeEntries(teamMemberId, projectId, from, to, false, uninvoicedOnly),
 				(t) => new
 				{
 					timeEntryList = t

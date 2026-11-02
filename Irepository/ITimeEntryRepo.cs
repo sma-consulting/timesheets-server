@@ -45,9 +45,11 @@ namespace sma.plan
 		// The entries matching every filter given - a null one doesn't narrow -
 		// without their edit history. With `visibleTo` set, only that team
 		// member's own entries and those on `visibleProjectIds` (someone who
-		// isn't an admin); null leaves them all in.
+		// isn't an admin); null leaves them all in. `brief` loads only what adding
+		// up hours needs (see GetHoursBetween), not the notes; `uninvoicedOnly`
+		// leaves out the entries an issued invoice has billed.
 		List<TimeEntry> GetFiltered(string teamMemberId, string projectId, DateOnly? from, DateOnly? to,
-			string visibleTo, IEnumerable<string> visibleProjectIds);
+			string visibleTo, IEnumerable<string> visibleProjectIds, bool brief = false, bool uninvoicedOnly = false);
 				
 		// How many entries are logged against any of the tasks or sub-tasks.
 		long CountLoggedAgainst(IEnumerable<string> projectTaskIds, IEnumerable<string> projectSubTaskIds);

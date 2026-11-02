@@ -20,8 +20,11 @@ namespace sma.plan
 		TimeEntry Delete(TimeEntry existing);
 
 		// The entries the caller may see for a person, project and/or days - a
-		// null one doesn't narrow - without their history.
-		List<TimeEntry> GetTimeEntries(string teamMemberId, string projectId, DateOnly? from, DateOnly? to);
+		// null one doesn't narrow - without their history; `brief`, with only
+		// what adding up hours needs; `uninvoicedOnly`, without those an issued
+		// invoice has billed.
+		List<TimeEntry> GetTimeEntries(string teamMemberId, string projectId, DateOnly? from, DateOnly? to,
+			bool brief = false, bool uninvoicedOnly = false);
 
 		// After Validate, which fills in the entry's project.
 		bool MayLogAgainst(string teamMemberId, string projectId);

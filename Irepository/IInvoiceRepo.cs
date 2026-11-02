@@ -14,6 +14,13 @@ namespace sma.plan
 		// Like Find, with nothing but the invoice's number and month - enough to
 		// name it.
 		Invoice FindNumber(string id);
+
+		// Like Find, with nothing but what a work-completed note needs: the
+		// projects it bills, whether it's cancelled, and its notes.
+		Invoice FindWorkCompleted(string id);
+
+		// Replaces the invoice's work-completed notes, and nothing else.
+		void SetWorkCompleted(string id, List<InvoiceWorkNote> notes);
 		List<Invoice> GetAll();
 		Tuple<Invoice, Invoice> Update(Invoice data);
 
@@ -26,11 +33,11 @@ namespace sma.plan
 		List<Invoice> GetSummaries(IEnumerable<string>? projectIds, bool issuedOnly,
 			DateOnly? from = null, DateOnly? to = null, bool includeOpen = false);
 
-		// The month's invoices, not cancelled, already billing any of the
-		// subprojects (or, made before invoices listed theirs, any of the
-		// projects), other than `exceptId`. Only their number, month and what
-		// they bill.
-		List<Invoice> ActiveCovering(DateOnly month, IEnumerable<string> projectIds,
+		// The invoices, not cancelled, already billing any of the subprojects
+		// (or, made before invoices listed theirs, any of the projects) for any
+		// day from `from` to `to`, other than `exceptId`. Only their number,
+		// month, period and what they bill.
+		List<Invoice> ActiveCovering(DateOnly from, DateOnly to, IEnumerable<string> projectIds,
 			IEnumerable<string> projectTaskIds, string exceptId);
 
 		// The issued invoices that aren't cancelled, with nothing but their id

@@ -139,13 +139,17 @@ namespace sma.plan
 		// Ne ("not true") rather than Eq false, so an invoice saved before
 		// Cancelled existed still counts as not cancelled. An older invoice, with
 		// no subprojects listed, bills all of its ProjectId.
-		public List<Invoice> ActiveCovering(DateOnly month, IEnumerable<string> projectIds,
+		//
+		// An invoice ends in its Month, so one billing any day from `from` on
+		// has a Month from `from` on: the query narrows by that, and the exact
+		// overlap is checked here.
+		public List<Invoice> ActiveCovering(DateOnly from, DateOnly to, IEnumerable<string> projectIds,
 			IEnumerable<string> projectTaskIds, string exceptId)
 		{
 			var f = Builders<Invoice>.Filter;
 			var older = (f.Exists(i => i.ProjectTaskIds, false) | f.Size(i => i.ProjectTaskIds, 0))
 				& f.In(i => i.ProjectId, ValidIds(projectIds));
-			var filter = DateBetween(nameof(Invoice.Month), month, month)
+			var filter = DateBetween(nameof(Invoice.Month), from, null)
 				& f.Ne(i => i.Cancelled, true)
 				& (f.AnyIn(i => i.ProjectTaskIds, projectTaskIds ?? Enumerable.Empty<string>()) | older);
 			if (ObjectId.TryParse(exceptId, out _))
@@ -156,11 +160,12 @@ namespace sma.plan
 			var coverage = Builders<Invoice>.Projection
 				.Include(i => i.Number)
 				.Include(i => i.Month)
+				.Include(i => i.PeriodStart)
+				.Include(i => i.PeriodEnd)
 				.Include(i => i.ProjectId)
 				.Include(i => i.ProjectTaskIds);
-			// The exact month: the query narrows by its parts (see DateBetween).
 			return DBCollection.Find(filter).Project<Invoice>(coverage).ToList()
-				.Where(i => i.Month == month)
+				.Where(i => i.From() <= to && i.To() >= from)
 				.ToList();
 		}
 
@@ -184,6 +189,29 @@ namespace sma.plan
 				.Include(i => i.Number)
 				.Include(i => i.Month);
 			return DBCollection.Find(i => i.Id == id).Project<Invoice>(numberOnly).FirstOrDefault();
+		}
+
+		public Invoice FindWorkCompleted(string id)
+		{
+			if (!ObjectId.TryParse(id, out _))
+			{
+				return null;
+			}
+			var notesOnly = Builders<Invoice>.Projection
+				.Include(i => i.ProjectId)
+				.Include(i => i.ProjectIds)
+				.Include(i => i.Cancelled)
+				.Include(i => i.WorkCompleted);
+			return DBCollection.Find(i => i.Id == id).Project<Invoice>(notesOnly).FirstOrDefault();
+		}
+
+		// One update in the database: nothing else on the invoice is read or
+		// written.
+		public void SetWorkCompleted(string id, List<InvoiceWorkNote> notes)
+		{
+			DBCollection.UpdateOne(
+				Builders<Invoice>.Filter.Eq(i => i.Id, id),
+				Builders<Invoice>.Update.Set(i => i.WorkCompleted, notes));
 		}
 
 		// The issued, not cancelled invoice that bills an expense, if any.

@@ -73,7 +73,7 @@ namespace sma.plan
 			}
 
 			invoice.Month = LastDayOf(invoice.Month);
-			invalid = SetDates(invoice) ?? AlreadyInvoiced(invoice, subprojects);
+			invalid = SetPeriod(invoice) ?? SetDates(invoice) ?? AlreadyInvoiced(invoice, subprojects);
 			if (invalid != null)
 			{
 				return Invalid(invalid);
@@ -91,6 +91,8 @@ namespace sma.plan
 			invoice.Paid = false;
 			invoice.PaymentDate = null;
 			invoice.Approvals = new List<InvoiceApproval>();
+			// Written on the Reports page once the invoice exists.
+			invoice.WorkCompleted = new List<InvoiceWorkNote>();
 			invoice.TimeEntries = TimeEntriesFor(invoice);
 			ClearBilledProject(invoice);
 
@@ -208,6 +210,8 @@ namespace sma.plan
 			invoice.ProjectIds = stored.ProjectIds ?? new List<string>();
 			invoice.ProjectTaskIds = stored.ProjectTaskIds ?? new List<string>();
 			invoice.Month = stored.Month;
+			invoice.PeriodStart = stored.PeriodStart;
+			invoice.PeriodEnd = stored.PeriodEnd;
 
 			string invalid = Validate(invoice) ?? SetDates(invoice);
 			if (invalid != null)
@@ -227,7 +231,9 @@ namespace sma.plan
 			invoice.Paid = stored.Paid;
 			invoice.PaymentDate = stored.PaymentDate;
 			invoice.Approvals = stored.Approvals ?? new List<InvoiceApproval>();
-			// A draft bills the month's hours as they are now.
+			// Written on the Reports page, not the invoice's own editor.
+			invoice.WorkCompleted = stored.WorkCompleted ?? new List<InvoiceWorkNote>();
+			// A draft bills its period's hours as they are now.
 			invoice.TimeEntries = TimeEntriesFor(invoice);
 			ClearBilledProject(invoice);
 
@@ -407,6 +413,64 @@ namespace sma.plan
 			public DateOnly? PaymentDate { get; set; }
 		}
 
+
+		// One project's "work completed this period" for its progress report:
+		// { "projectId": ..., "text": ... }. On a draft or an issued invoice -
+		// the report is often finished after issuing - but not a cancelled one.
+		// Only the notes are read and written.
+		[Allow(Role.Admin)]
+		[Function("SaveInvoiceWorkCompleted")]
+		public async Task<IActionResult> RunSaveInvoiceWorkCompleted(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "invoice/{id}/workCompleted/")] HttpRequest req, string id)
+		{
+			InvoiceWorkNote note = JsonConvert.DeserializeObject<InvoiceWorkNote>(
+				await new StreamReader(req.Body).ReadToEndAsync());
+			if (note == null || string.IsNullOrWhiteSpace(note.ProjectId))
+			{
+				return Invalid("Say which project the work is for.");
+			}
+			string text = (note.Text ?? "").Trim();
+			if (text.Length > MaxWorkCompletedLength)
+			{
+				return Invalid(string.Format("Keep the work completed under {0} characters.", MaxWorkCompletedLength));
+			}
+
+			Invoice stored = _invoiceRepo.FindWorkCompleted(id);
+			if (stored == null)
+			{
+				return Invalid("That invoice no longer exists.");
+			}
+			if (stored.Cancelled)
+			{
+				return Invalid("A cancelled invoice can't be changed.");
+			}
+			if (!stored.AllProjectIds().Contains(note.ProjectId))
+			{
+				return Invalid("That project isn't on this invoice.");
+			}
+
+			List<InvoiceWorkNote> notes = (stored.WorkCompleted ?? new List<InvoiceWorkNote>())
+				.Where(n => n.ProjectId != note.ProjectId)
+				.ToList();
+			if (text.Length > 0)
+			{
+				notes.Add(new InvoiceWorkNote { ProjectId = note.ProjectId, Text = text });
+			}
+
+			return Ok(
+				() =>
+				{
+					_invoiceRepo.SetWorkCompleted(id, notes);
+					return notes;
+				},
+				(n) => new
+				{
+					workCompleted = n
+				});
+		}
+
+		private const int MaxWorkCompletedLength = 4000;
+
 		// The ids of the expenses an invoice bills.
 		private static HashSet<string> ExpenseIdsOf(Invoice invoice)
 		{
@@ -456,15 +520,44 @@ namespace sma.plan
 			return null;
 		}
 
-		// An invoice is always dated the last day of the month it bills. With
-		// terms (Net 30) its due date is that many days later; a due date set by
-		// hand (no terms) is kept as sent, but can't come before the invoice date.
+		// A period other than the whole month, when one was sent: both days, the
+		// first no later than the last. Month becomes the month it ends in. A
+		// period that's just the whole month is kept as Month alone.
+		private static string SetPeriod(Invoice invoice)
+		{
+			if (invoice.PeriodStart == null && invoice.PeriodEnd == null)
+			{
+				return null;
+			}
+			if (invoice.PeriodStart == null || invoice.PeriodEnd == null)
+			{
+				return "Choose the first and the last day the invoice is for.";
+			}
+			if (invoice.PeriodStart > invoice.PeriodEnd)
+			{
+				return "The invoice's first day can't be after its last.";
+			}
+
+			invoice.Month = LastDayOf(invoice.PeriodEnd.Value);
+			if (invoice.PeriodStart == new DateOnly(invoice.Month.Year, invoice.Month.Month, 1)
+				&& invoice.PeriodEnd == invoice.Month)
+			{
+				invoice.PeriodStart = null;
+				invoice.PeriodEnd = null;
+			}
+			return null;
+		}
+
+		// An invoice is always dated the last day it bills - its month's, for a
+		// whole month. With terms (Net 30) its due date is that many days later;
+		// a due date set by hand (no terms) is kept as sent, but can't come
+		// before the invoice date.
 		private static string SetDates(Invoice invoice)
 		{
-			invoice.InvoiceDate = invoice.Month;
+			invoice.InvoiceDate = invoice.To();
 			if (invoice.Terms.HasValue)
 			{
-				invoice.DueDate = invoice.Month.AddDays(invoice.Terms.Value);
+				invoice.DueDate = invoice.To().AddDays(invoice.Terms.Value);
 			}
 			if (invoice.DueDate.HasValue && invoice.DueDate < invoice.InvoiceDate)
 			{
@@ -525,12 +618,12 @@ namespace sma.plan
 			return null;
 		}
 
-		// A subproject is on one invoice a month. Cancelled ones don't count:
-		// cancelling frees the month for a new invoice. Returns why not, or null.
+		// A subproject is on one invoice for any day. Cancelled ones don't count:
+		// cancelling frees their days for a new invoice. Returns why not, or null.
 		private string AlreadyInvoiced(Invoice invoice, List<ProjectTask> subprojects)
 		{
 			Invoice other = _invoiceRepo
-				.ActiveCovering(invoice.Month, invoice.ProjectIds, invoice.ProjectTaskIds, null)
+				.ActiveCovering(invoice.From(), invoice.To(), invoice.ProjectIds, invoice.ProjectTaskIds, null)
 				.FirstOrDefault();
 			if (other == null)
 			{
@@ -542,18 +635,17 @@ namespace sma.plan
 			ProjectTask taken = subprojects.FirstOrDefault(t =>
 				older ? t.ProjectId == other.ProjectId : other.ProjectTaskIds.Contains(t.Id));
 			return taken == null
-				? string.Format("This project already has an invoice for {0}: {1}.", MonthName(invoice.Month), other.Number)
-				: string.Format("{0} is already on invoice {1} for {2}.", taken.Name, other.Number, MonthName(invoice.Month));
+				? string.Format("This project already has an invoice for {0}: {1}.", PeriodName(other), other.Number)
+				: string.Format("{0} is already on invoice {1} for {2}.", taken.Name, other.Number, PeriodName(other));
 		}
 
-		// The time an invoice bills: its subprojects' entries in its month - on
+		// The time an invoice bills: its subprojects' entries in its period - on
 		// an older invoice, all of its project's.
 		private List<UserTimeEntry> TimeEntriesFor(Invoice invoice)
 		{
-			DateOnly first = new DateOnly(invoice.Month.Year, invoice.Month.Month, 1);
 			List<TimeEntry> entries = invoice.ProjectTaskIds != null && invoice.ProjectTaskIds.Count > 0
-				? _timeEntryRepo.GetOnTasks(invoice.ProjectTaskIds, first, invoice.Month)
-				: _timeEntryRepo.GetFiltered(null, invoice.ProjectId, first, invoice.Month, null, null);
+				? _timeEntryRepo.GetOnTasks(invoice.ProjectTaskIds, invoice.From(), invoice.To())
+				: _timeEntryRepo.GetFiltered(null, invoice.ProjectId, invoice.From(), invoice.To(), null, null);
 			return entries
 				.OrderBy(e => e.Date)
 				.Select(UserTimeEntry.From)
@@ -561,12 +653,13 @@ namespace sma.plan
 		}
 
 		// Copies what priced and grouped the invoice's hours, as it is at issue:
-		// its projects' assignments, billing rates, tasks and sub-tasks.
+		// its projects' assignments, billing rates (each project's rate list's,
+		// tagged with the project), tasks and sub-tasks.
 		private void CopyBilledProject(Invoice invoice)
 		{
 			List<string> projectIds = invoice.AllProjectIds();
 			invoice.BilledAssignments = _assignmentRepo.GetByProjects(projectIds);
-			invoice.BilledRates = _rateRepo.GetByProjects(projectIds);
+			invoice.BilledRates = _rateRepo.GetForProjects(_projectRepo.GetByIds(projectIds));
 			invoice.BilledTasks = _taskRepo.GetByProjects(projectIds);
 
 			// A sub-task's ProjectId is missing on older records, so its task
@@ -623,9 +716,12 @@ namespace sma.plan
 			return new DateOnly(date.Year, date.Month, DateTime.DaysInMonth(date.Year, date.Month));
 		}
 
-		private static string MonthName(DateOnly month)
+		// "October 2026", or for another period "Feb 1, 2025 – Feb 20, 2025".
+		private static string PeriodName(Invoice invoice)
 		{
-			return month.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+			return invoice.PeriodStart == null
+				? invoice.Month.ToString("MMMM yyyy", CultureInfo.InvariantCulture)
+				: string.Format(CultureInfo.InvariantCulture, "{0:MMM d, yyyy} – {1:MMM d, yyyy}", invoice.From(), invoice.To());
 		}
 	}
 }

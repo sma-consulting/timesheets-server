@@ -39,9 +39,5 @@ namespace sma.plan
 		// month, period and what they bill.
 		List<Invoice> ActiveCovering(DateOnly from, DateOnly to, IEnumerable<string> projectIds,
 			IEnumerable<string> projectTaskIds, string exceptId);
-
-		// The issued invoices that aren't cancelled, with nothing but their id
-		// and the ids of the time entries each billed (TimeEntries[].TimeEntryId).
-		List<Invoice> GetIssuedTimeEntryIds();
 	}
 }

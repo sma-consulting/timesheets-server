@@ -23,10 +23,13 @@ namespace sma.plan
 			return DBCollection.Find(filter).Project<Project>(projection).ToList();
 		}
 
+		// Just the ids read, not the projects.
+		private static readonly ProjectionDefinition<Project> IdOnly = Builders<Project>.Projection.Include(p => p.Id);
+
 		public HashSet<string> IdsManagedBy(string teamMemberId)
 		{
 			var filter = Builders<Project>.Filter.In(p => p.ProjectManagerId, ValidIds(new[] { teamMemberId }));
-			return DBCollection.Find(filter).ToList().Select(p => p.Id).ToHashSet();
+			return DBCollection.Find(filter).Project<Project>(IdOnly).ToList().Select(p => p.Id).ToHashSet();
 		}
 
 		public long CountByCustomer(string customerId)
@@ -40,7 +43,7 @@ namespace sma.plan
 		public HashSet<string> IdsPaidTimeOff()
 		{
 			var filter = Builders<Project>.Filter.Eq(p => p.PaidTimeOff, true);
-			return DBCollection.Find(filter).ToList().Select(p => p.Id).ToHashSet();
+			return DBCollection.Find(filter).Project<Project>(IdOnly).ToList().Select(p => p.Id).ToHashSet();
 		}
 
 		public List<Project> GetRateListUse()

@@ -40,8 +40,8 @@ namespace sma.plan
 		// Cancelling the invoice, or unlocking, frees it.
 		//
 		// `existing` is the entry as stored, already loaded by the caller: its
-		// Invoiced flag says whether it's billed (issuing and cancelling set it,
-		// InvoicedTimeSync keeps it right), so nothing more is read unless the
+		// Invoiced flag says whether it's billed (issuing and cancelling set it),
+		// so nothing more is read unless the
 		// change is refused - and then only the invoice's number and month.
 		//
 		// `changed` is the entry as an update would save it. A save that changes

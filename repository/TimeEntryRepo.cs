@@ -78,11 +78,6 @@ namespace sma.plan
 			return DBCollection.UpdateMany(filter, update).ModifiedCount;
 		}
 
-		public long CountInvoiced()
-		{
-			return DBCollection.CountDocuments(Builders<TimeEntry>.Filter.Eq(e => e.Invoiced, true));
-		}
-
 		// A save is one call to the database: unlike Create, Update and Delete,
 		// these don't read the entry before or after.
 		public TimeEntry Find(string id)

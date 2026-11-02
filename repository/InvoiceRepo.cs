@@ -169,16 +169,6 @@ namespace sma.plan
 				.ToList();
 		}
 
-		public List<Invoice> GetIssuedTimeEntryIds()
-		{
-			var filter = Builders<Invoice>.Filter.Eq(i => i.Issued, true)
-				& Builders<Invoice>.Filter.Ne(i => i.Cancelled, true);
-			var billedIds = Builders<Invoice>.Projection
-				.Include(nameof(Invoice.TimeEntries) + "." + nameof(UserTimeEntry.TimeEntryId));
-
-			return DBCollection.Find(filter).Project<Invoice>(billedIds).ToList();
-		}
-
 		public Invoice FindNumber(string id)
 		{
 			if (!ObjectId.TryParse(id, out _))

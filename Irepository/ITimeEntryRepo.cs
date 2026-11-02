@@ -38,10 +38,6 @@ namespace sma.plan
 		long SetLocked(string teamMemberId, string projectId, DateOnly from, DateOnly to,
 			DateTime? lockedAt, string lockedBy);
 
-		// How many entries are marked invoiced.
-		long CountInvoiced();
-
-
 		// The entries matching every filter given - a null one doesn't narrow -
 		// without their edit history. With `visibleTo` set, only that team
 		// member's own entries and those on `visibleProjectIds` (someone who

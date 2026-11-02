@@ -29,6 +29,20 @@ namespace sma.plan
 			// Which projects someone manages - checked on most PM requests.
 			On<Project>(warn, p => p.ProjectManagerId);
 
+			// Who's on which project - checked on most requests from staff, and on
+			// every time entry saved.
+			On<ProjectAssignment>(warn, a => a.TeamMemberId, a => a.ProjectId);
+
+			// A project's subprojects and sub-tasks - the Time Log's task picker,
+			// project pages and invoices.
+			On<ProjectTask>(warn, t => t.ProjectId);
+			On<ProjectSubTask>(warn, s => s.ProjectId, s => s.ProjectTaskId);
+
+			// A project's invoices, and the issued ones - the Invoices page,
+			// Financials and the reports. ProjectIds is a list: each project in it
+			// is indexed.
+			On<Invoice>(warn, i => i.ProjectId, i => i.ProjectIds, i => i.Issued);
+
 			// A span of days: Staff hours' month, the Time Log's week, a report's
 			// period, the Invoices page's last 12 months.
 			OnDate<TimeEntry>(warn, nameof(TimeEntry.Date));

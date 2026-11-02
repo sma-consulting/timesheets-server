@@ -50,24 +50,31 @@ namespace sma.plan
 		public async Task<IActionResult> RunGetExpenses(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "expense/")] HttpRequest req)
 		{
-			// Narrowed by ?from=&to= (yyyy-MM-dd) and ?projectId=, so a page gets
-			// only what it shows: the Expenses page a week, an invoice its
-			// project's month.
+			// Narrowed by ?from=&to= (yyyy-MM-dd), ?projectId= and ?status=, so a
+			// page gets only what it shows: the Expenses page a week, an invoice
+			// its project's month, Approvals the claims waiting for review.
+			// ?mine=true: only your own, admins included - the Expenses page.
 			ApiError badDates = ReadDateRange(req, out DateOnly? from, out DateOnly? to);
 			if (badDates != null)
 			{
 				return Invalid(badDates);
 			}
 			string projectId = QueryValue(req, "projectId");
-
-			if (_securityService.IsCurrentUserAdmin())
+			string status = QueryValue(req, "status");
+			if (status != null && status != Expense.StatusSubmitted && status != Expense.StatusApproved && status != Expense.StatusRejected)
 			{
-				// Everyone's, but never the whole collection.
-				if (projectId == null && from == null && to == null)
+				return Invalid(Errors.Expenses.BadStatus);
+			}
+
+			if (_securityService.IsCurrentUserAdmin() && QueryValue(req, "mine") != "true")
+			{
+				// Everyone's, but never the whole collection: those waiting for
+				// review are few, every other status needs dates or a project.
+				if (projectId == null && from == null && to == null && status != Expense.StatusSubmitted)
 				{
 					return Invalid(Errors.Expenses.FilterRequired);
 				}
-				return Ok(() => _expenseRepo.GetFiltered(null, projectId, from, to), (e) => new { expenseList = e });
+				return Ok(() => _expenseRepo.GetFiltered(null, projectId, from, to, status), (e) => new { expenseList = e });
 			}
 
 			string me = _securityService.GetCurrentTeamMemberId();
@@ -76,7 +83,17 @@ namespace sma.plan
 				return Forbidden(Errors.Expenses.SignInRequired);
 			}
 
-			return Ok(() => _expenseRepo.GetFiltered(me, projectId, from, to), (e) => new { expenseList = e });
+			return Ok(() => _expenseRepo.GetFiltered(me, projectId, from, to, status), (e) => new { expenseList = e });
+		}
+
+
+		// How many claims are waiting for review, for the Approvals menu item.
+		[Allow(Role.Admin)]
+		[Function("CountExpensesAwaitingReview")]
+		public async Task<IActionResult> RunCountExpensesAwaitingReview(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "expense/awaitingReview/")] HttpRequest req)
+		{
+			return Ok(() => _expenseRepo.CountByStatus(Expense.StatusSubmitted), (n) => new { count = n });
 		}
 
 
@@ -86,20 +103,33 @@ namespace sma.plan
 		// project, a project manager's for one they manage; anyone else, none.
 		// The Expenses page keeps using GetExpenses, so managers still see only
 		// their own there.
+		//
+		// With no project but both dates: the expenses on every project the
+		// caller reports on (an admin's all, a manager's own), not rejected, and
+		// only what adding them up needs - the Reports page's Expenses report.
 		[Allow(Role.SignedIn)]
 		[Function("GetReportExpenses")]
 		public async Task<IActionResult> RunGetReportExpenses(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "reportExpense/")] HttpRequest req)
 		{
 			string projectId = QueryValue(req, "projectId");
-			if (projectId == null)
-			{
-				return Invalid(Errors.Expenses.ProjectRequired);
-			}
 			ApiError badDates = ReadDateRange(req, out DateOnly? from, out DateOnly? to);
 			if (badDates != null)
 			{
 				return Invalid(badDates);
+			}
+			if (projectId == null)
+			{
+				if (from == null || to == null)
+				{
+					return Invalid(Errors.Expenses.ProjectRequired);
+				}
+				IEnumerable<string>? scope = _securityService.IsCurrentUserAdmin()
+					? null
+					: _projectService.ManagedProjectIds();
+				return Ok(
+					() => _expenseRepo.GetForReport(scope, from.Value, to.Value),
+					(e) => new { expenseList = e });
 			}
 
 			if (!_securityService.IsCurrentUserAdmin() && !_projectService.ManagedProjectIds().Contains(projectId))

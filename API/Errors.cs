@@ -36,6 +36,8 @@ namespace sma.plan
 
 			public static readonly ApiError HarvestToken =
 				new("dev.harvestToken", "Set HARVEST_TOKEN_FILE to the file holding the Harvest token.");
+			public static readonly ApiError AccessExport =
+				new("dev.accessExport", "ACCESS_EXPORT_FOLDER is set, but there's no tbInvoice, tbClient or tbProject export there.");
 		}
 
 		internal static class Auth
@@ -112,6 +114,9 @@ namespace sma.plan
 			// An admin listing everyone's expenses must narrow it down.
 			public static readonly ApiError FilterRequired =
 				new("expenses.filterRequired", "Choose a project or dates to list expenses.");
+
+			public static readonly ApiError BadStatus =
+				new("expenses.badStatus", "Choose Submitted, Approved or Rejected.");
 
 			public static readonly ApiError NotYourProject =
 				new("expenses.notYourProject", "That project isn't one you manage.");

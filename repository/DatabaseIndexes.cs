@@ -22,8 +22,9 @@ namespace sma.plan
 			On<TimeEntry>(warn, e => e.TeamMemberId, e => e.ProjectId,
 				e => e.ProjectTaskId, e => e.ProjectSubTaskId);
 
-			// "My expenses" and the PM expense report.
-			On<Expense>(warn, e => e.TeamMemberId, e => e.ProjectId);
+			// "My expenses", the PM expense report, and the claims waiting for
+			// review on Approvals.
+			On<Expense>(warn, e => e.TeamMemberId, e => e.ProjectId, e => e.Status);
 
 			// Which projects someone manages - checked on most PM requests.
 			On<Project>(warn, p => p.ProjectManagerId);

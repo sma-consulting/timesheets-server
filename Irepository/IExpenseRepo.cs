@@ -19,8 +19,17 @@ namespace sma.plan
 		List<Expense> GetByProjects(IEnumerable<string> projectIds);
 
 		// The expenses matching every filter given - one team member's, on one
-		// project, dated from/to (inclusive) - each null to leave it out.
-		List<Expense> GetFiltered(string? teamMemberId, string? projectId, DateOnly? from, DateOnly? to);
+		// project, dated from/to (inclusive), with one status - each null to
+		// leave it out.
+		List<Expense> GetFiltered(string? teamMemberId, string? projectId, DateOnly? from, DateOnly? to, string? status = null);
+
+		// For the company-wide expense report: the expenses dated from/to
+		// (inclusive) that weren't rejected, on `projectIds` or on any project
+		// (null), with only what adding them up needs - no notes or receipt.
+		List<Expense> GetForReport(IEnumerable<string>? projectIds, DateOnly from, DateOnly to);
+
+		// How many have this status - those waiting for review, for the menu.
+		long CountByStatus(string status);
 
 		// Approved, billable, not yet invoiced - on the projects, or on every
 		// project when projectIds is null.

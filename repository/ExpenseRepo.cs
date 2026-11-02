@@ -26,10 +26,14 @@ namespace sma.plan
 			return DBCollection.Find(filter).SortBy(e => e.Id).ToList();
 		}
 
-		public List<Expense> GetFiltered(string? teamMemberId, string? projectId, DateOnly? from, DateOnly? to)
+		public List<Expense> GetFiltered(string? teamMemberId, string? projectId, DateOnly? from, DateOnly? to, string? status = null)
 		{
 			var f = Builders<Expense>.Filter;
 			var filter = DateBetween(nameof(Expense.Date), from, to);
+			if (status != null)
+			{
+				filter &= f.Eq(e => e.Status, status);
+			}
 
 			foreach ((string id, bool isMember) in new[] { (teamMemberId, true), (projectId, false) })
 			{
@@ -48,6 +52,31 @@ namespace sma.plan
 			// The exact range: the query narrows by month (see DateBetween).
 			return DBCollection.Find(filter).SortBy(e => e.Id).ToList()
 				.Where(e => (from == null || e.Date >= from.Value) && (to == null || e.Date <= to.Value))
+				.ToList();
+		}
+
+		public List<Expense> GetForReport(IEnumerable<string>? projectIds, DateOnly from, DateOnly to)
+		{
+			var f = Builders<Expense>.Filter;
+			var filter = DateBetween(nameof(Expense.Date), from, to) & f.Ne(e => e.Status, Expense.StatusRejected);
+			if (projectIds != null)
+			{
+				filter &= f.In(e => e.ProjectId, ValidIds(projectIds));
+			}
+			var adding = Builders<Expense>.Projection
+				.Include(e => e.TeamMemberId)
+				.Include(e => e.ProjectId)
+				.Include(e => e.Category)
+				.Include(e => e.Date)
+				.Include(e => e.Amount)
+				.Include(e => e.Status)
+				.Include(e => e.Billable)
+				.Include(e => e.Reimbursable)
+				.Include(e => e.Invoiced);
+
+			// The exact range: the query narrows by month (see DateBetween).
+			return DBCollection.Find(filter).Project<Expense>(adding).ToList()
+				.Where(e => e.Date >= from && e.Date <= to)
 				.ToList();
 		}
 
@@ -76,6 +105,11 @@ namespace sma.plan
 				& Builders<Expense>.Filter.Ne(e => e.Reimbursable, false)
 				& Builders<Expense>.Filter.Ne(e => e.Reimbursed, true);
 			return DBCollection.Find(filter).SortBy(e => e.Id).ToList();
+		}
+
+		public long CountByStatus(string status)
+		{
+			return DBCollection.CountDocuments(Builders<Expense>.Filter.Eq(e => e.Status, status));
 		}
 
 		public List<Expense> GetByReimbursementBatch(string batchId)

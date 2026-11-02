@@ -68,12 +68,7 @@ namespace sma.plan
 					// The paid hours off project, as at startup, for holidays,
 					// leave and lunch breaks.
 					PaidTimeOffSeed.Run(_projectRepo, _taskRepo, _subTaskRepo);
-					List<string> paidTimeOff = _projectRepo.IdsPaidTimeOff().ToList();
-					var timeOff = _subTaskRepo
-						.GetInProjects(paidTimeOff, _taskRepo.GetByProjects(paidTimeOff).Select(t => t.Id))
-						.Where(s => s.TimeOffType != null)
-						.GroupBy(s => s.TimeOffType)
-						.ToDictionary(g => g.Key, g => g.First());
+					var timeOff = PaidTimeOffSeed.ByType(_projectRepo, _taskRepo, _subTaskRepo);
 
 					return new DevSeedGenerator(people, years, email, name, timeOff,
 						_holidayRepo.GetAll().Select(h => h.Date)).Run();

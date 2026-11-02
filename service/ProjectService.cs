@@ -114,6 +114,8 @@ namespace sma.plan
 		public Project Create(Project newProject)
 		{
 			newProject.PaidTimeOff = false;
+			// Chosen afterwards, on the project's Rates card.
+			newProject.RateListId = null;
 			return _repo.Create(newProject);
 		}
 
@@ -211,10 +213,13 @@ namespace sma.plan
 
 		// PaidTimeOff stays as stored: the project page doesn't send it, and
 		// saving there mustn't switch the paid hours off project off (or another
-		// project on).
+		// project on). So does the rate list, which is set on its own
+		// (RateListFunctions) and may have changed since the page loaded.
 		public Project Update(Project project)
 		{
-			project.PaidTimeOff = _repo.Get(project.Id).PaidTimeOff;
+			Project stored = _repo.Get(project.Id);
+			project.PaidTimeOff = stored.PaidTimeOff;
+			project.RateListId = stored.RateListId;
 			return _repo.Update(project).Item2;
 		}
 

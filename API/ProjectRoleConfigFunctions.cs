@@ -19,19 +19,16 @@ namespace sma.plan
         private readonly ILogger<ProjectRoleConfigFunctions> _logger;
         private readonly IProjectAssignmentRepo _assignmentRepo;
         private readonly ITeamMemberRepo _teamMemberRepo;
-        private readonly IProjectBillingRateRepo _rateRepo;
         private readonly DatabaseRepo<ProjectRole> _roleRepo = new DatabaseRepo<ProjectRole>();
 
         public ProjectRoleConfigFunctions(
             ILogger<ProjectRoleConfigFunctions> logger,
             IProjectAssignmentRepo assignmentRepo,
-            ITeamMemberRepo teamMemberRepo,
-            IProjectBillingRateRepo rateRepo)
+            ITeamMemberRepo teamMemberRepo)
         {
             _logger = logger;
             _assignmentRepo = assignmentRepo;
             _teamMemberRepo = teamMemberRepo;
-            _rateRepo = rateRepo;
         }
 
         [Allow(Role.Admin)]
@@ -58,8 +55,8 @@ namespace sma.plan
 
 
         // Refused while the role is in use - deleting it would leave those
-        // assignments, team members and billing rates pointing at a role that no
-        // longer exists.
+        // assignments and team members pointing at a role that no longer exists.
+        // (Billing rates are a person's, on a rate list, not a role's.)
         [Allow(Role.Admin)]
         [Function("DeleteProjectRole")]
         public async Task<IActionResult> RunDeleteProjectRole(
@@ -67,13 +64,12 @@ namespace sma.plan
         {
             long assignments = _assignmentRepo.CountByRole(id);
             long teamMembers = _teamMemberRepo.CountWithRole(id);
-            long rates = _rateRepo.CountByRole(id);
 
-            if (assignments > 0 || teamMembers > 0 || rates > 0)
+            if (assignments > 0 || teamMembers > 0)
             {
                 return Invalid(string.Format(
-                    "This role is still in use by {0} project assignment(s), {1} team member(s) and {2} billing rate(s). Remove those first.",
-                    assignments, teamMembers, rates));
+                    "This role is still in use by {0} project assignment(s) and {1} team member(s). Remove those first.",
+                    assignments, teamMembers));
             }
 
             return Ok(

@@ -21,12 +21,18 @@ namespace sma.plan
 		public const int MaxPeople = 300;
 		public const int MaxYears = 5;
 
+		public const string DatabaseSuffix = "LOADTEST";
+
 		// On only where ENABLE_DEV_SEED is "true" and the database is a LOADTEST
 		// one. Never set ENABLE_DEV_SEED in Azure.
-		public static bool Enabled()
+		public static bool Enabled() => Allowed(DatabaseSuffix);
+
+		// Whether a test database whose name ends in `suffix` may be emptied and
+		// filled: ENABLE_DEV_SEED on, and the database named so.
+		public static bool Allowed(string suffix)
 		{
 			return string.Equals(Environment.GetEnvironmentVariable("ENABLE_DEV_SEED"), "true", StringComparison.OrdinalIgnoreCase)
-				&& DatabaseName().EndsWith("LOADTEST", StringComparison.OrdinalIgnoreCase);
+				&& DatabaseName().EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
 		}
 
 		public static string DatabaseName()
@@ -34,13 +40,17 @@ namespace sma.plan
 			return Environment.GetEnvironmentVariable("DATABASE_NAME") ?? "";
 		}
 
-		// Empties every collection the generator fills. The collections - and
-		// their indexes - stay; holidays are left as they are.
-		public static void Wipe()
+		public static void Wipe() => Wipe(DatabaseSuffix);
+
+		// Empties every collection the test data fills, in a database Allowed
+		// with `suffix` - LOADTEST for the test data, HARVEST for the Harvest
+		// import. The collections - and their indexes - stay; holidays are left
+		// as they are.
+		public static void Wipe(string suffix)
 		{
-			if (!Enabled())
+			if (!Allowed(suffix))
 			{
-				throw new InvalidOperationException("Test data is only ever written to a LOADTEST database.");
+				throw new InvalidOperationException($"Test data is only ever written to a {suffix} database.");
 			}
 
 			Clear<User>();
@@ -51,6 +61,7 @@ namespace sma.plan
 			Clear<ProjectTask>();
 			Clear<ProjectSubTask>();
 			Clear<ProjectAssignment>();
+			Clear<RateList>();
 			Clear<ProjectBillingRate>();
 			Clear<ProjectFinancials>();
 			Clear<TimeEntry>();
@@ -180,6 +191,7 @@ namespace sma.plan
 		private readonly List<ProjectTask> _subprojects = new();
 		private readonly List<ProjectSubTask> _tasks = new();
 		private readonly List<ProjectAssignment> _assignments = new();
+		private readonly List<RateList> _rateLists = new();
 		private readonly List<ProjectBillingRate> _rates = new();
 		private readonly List<ProjectFinancials> _financials = new();
 		private readonly List<TimeEntry> _entries = new();
@@ -226,6 +238,7 @@ namespace sma.plan
 			Insert(_subprojects);
 			Insert(_tasks);
 			Insert(_assignments);
+			Insert(_rateLists);
 			Insert(_rates);
 			Insert(_financials);
 			Insert(_entries);
@@ -435,23 +448,28 @@ namespace sma.plan
 			});
 		}
 
-		// One rate per role on the team; a project running over a new year gets
-		// a raise from January 1, the old rate closed the day before.
+		// The project's own rate list: each person on the team at about their
+		// role's base rate; a project running over a new year gets a raise from
+		// January 1, the old rate closed the day before.
 		private void MakeRates(Project project)
 		{
 			DateOnly start = project.StartDate ?? _start;
 			DateOnly raise = new DateOnly(start.Year + 1, 1, 1);
 			bool raised = (project.EndDate ?? _today) >= raise;
 
-			foreach (string roleId in _assignments.Where(a => a.ProjectId == project.Id).Select(a => a.ProjectRoleId).Distinct())
+			var list = new RateList { Id = NewId(), Name = $"{project.FundingCode} {project.Name} rates" };
+			_rateLists.Add(list);
+			project.RateListId = list.Id;
+
+			foreach (ProjectAssignment assignment in _assignments.Where(a => a.ProjectId == project.Id).GroupBy(a => a.TeamMemberId).Select(g => g.First()))
 			{
-				decimal baseRate = Roles[_roles.FindIndex(r => r.Id == roleId)].Rate;
+				decimal baseRate = Roles[_roles.FindIndex(r => r.Id == assignment.ProjectRoleId)].Rate;
 				decimal rate = Math.Round(baseRate * (decimal)(0.9 + _random.NextDouble() * 0.2), 0);
 				_rates.Add(new ProjectBillingRate
 				{
 					Id = NewId(),
-					ProjectId = project.Id,
-					ProjectRoleId = roleId,
+					RateListId = list.Id,
+					TeamMemberId = assignment.TeamMemberId,
 					HourlyRate = rate,
 					StartDate = start,
 					EndDate = raised ? raise.AddDays(-1) : null,
@@ -461,8 +479,8 @@ namespace sma.plan
 					_rates.Add(new ProjectBillingRate
 					{
 						Id = NewId(),
-						ProjectId = project.Id,
-						ProjectRoleId = roleId,
+						RateListId = list.Id,
+						TeamMemberId = assignment.TeamMemberId,
 						HourlyRate = Math.Round(rate * 1.04m, 0),
 						StartDate = raise,
 					});
@@ -792,15 +810,12 @@ namespace sma.plan
 		private IEnumerable<InvoiceLine> LabourLines(Project project, List<TimeEntry> entries,
 			Dictionary<string, TeamMember> personById, string po, string period)
 		{
-			var roleOnProject = _assignments.Where(a => a.ProjectId == project.Id)
-				.GroupBy(a => a.TeamMemberId)
-				.ToDictionary(g => g.Key, g => g.First().ProjectRoleId);
-			var ratesOnProject = _rates.Where(r => r.ProjectId == project.Id).ToList();
+			var ratesOnProject = _rates.Where(r => r.RateListId == project.RateListId).ToList();
 
 			return entries
-				.Where(e => e.Billable && roleOnProject.ContainsKey(e.TeamMemberId))
+				.Where(e => e.Billable)
 				.Select(e => (Entry: e, Rate: ratesOnProject.FirstOrDefault(r =>
-					r.ProjectRoleId == roleOnProject[e.TeamMemberId] && r.StartDate <= e.Date && (r.EndDate == null || r.EndDate >= e.Date))))
+					r.TeamMemberId == e.TeamMemberId && r.StartDate <= e.Date && (r.EndDate == null || r.EndDate >= e.Date))))
 				.Where(x => x.Rate != null)
 				.GroupBy(x => (x.Entry.TeamMemberId, x.Rate.Id))
 				.Select(g => (Name: personById[g.Key.TeamMemberId].Name, Rate: g.First().Rate.HourlyRate, Hours: g.Sum(x => x.Entry.Hours), PersonId: g.Key.TeamMemberId))
@@ -855,7 +870,19 @@ namespace sma.plan
 		private void CopyBilled(Invoice invoice, Project project, List<Expense> billedExpenses)
 		{
 			invoice.BilledAssignments = _assignments.Where(a => a.ProjectId == project.Id).ToList();
-			invoice.BilledRates = _rates.Where(r => r.ProjectId == project.Id).ToList();
+			invoice.BilledRates = _rates
+				.Where(r => r.RateListId == project.RateListId)
+				.Select(r => new ProjectBillingRate
+				{
+					Id = r.Id,
+					RateListId = r.RateListId,
+					TeamMemberId = r.TeamMemberId,
+					ProjectId = project.Id,
+					HourlyRate = r.HourlyRate,
+					StartDate = r.StartDate,
+					EndDate = r.EndDate,
+				})
+				.ToList();
 			invoice.BilledTasks = _subprojects.Where(t => t.ProjectId == project.Id).ToList();
 			invoice.BilledSubTasks = _tasks.Where(t => t.ProjectId == project.Id).ToList();
 			invoice.BilledExpenses = billedExpenses.ToList();
@@ -914,7 +941,8 @@ namespace sma.plan
 
 		// ---- Helpers ----------------------------------------------------------------
 
-		private static void Insert<T>(List<T> documents) where T : GeneralModel
+		// In batches, so a year's time entries aren't one huge request.
+		internal static void Insert<T>(List<T> documents) where T : GeneralModel
 		{
 			if (documents.Count == 0)
 			{

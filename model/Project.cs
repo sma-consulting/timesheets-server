@@ -61,6 +61,12 @@ namespace sma.plan
 		// The project's budget, disbursement rate and the rest of its financials
 		// are in ProjectFinancials: admins only, and saved on their own.
 
+		// The rate list its hours are priced from (RateList), often shared with
+		// the other projects on its contract. Null until one is chosen. Set on
+		// its own (RateListFunctions); a project save keeps it as stored.
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string RateListId { get; set; }
+
 		// Derived from ProjectType on every save (false only for NonBillable), so
 		// the two can't disagree.
 		public bool Billable { get; set; } = true;

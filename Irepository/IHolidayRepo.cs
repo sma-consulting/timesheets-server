@@ -8,6 +8,9 @@ namespace sma.plan
 		Holiday Delete(string id);
 		bool Exists(string id);
 
+		// Whether there are none at all - without loading any.
+		bool IsEmpty();
+
 		// All of them - about a dozen a year, so never worth filtering.
 		List<Holiday> GetAll();
 	}

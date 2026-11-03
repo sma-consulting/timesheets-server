@@ -223,7 +223,7 @@ namespace sma.plan
 		public async Task<IActionResult> RunUpdateExpense(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "expense/{id}/update/")] HttpRequest req, string id)
 		{
-			Expense existing = _expenseRepo.Get(id);
+			Expense existing = _expenseRepo.Find(id);
 			if (existing == null)
 			{
 				return Invalid(Errors.Expenses.NotFound);
@@ -340,13 +340,13 @@ namespace sma.plan
 		public async Task<IActionResult> RunReviewExpense(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "expense/{id}/review/")] HttpRequest req, string id)
 		{
-			Expense expense = _expenseRepo.Get(id);
+			Expense expense = _expenseRepo.Find(id);
 			if (expense == null)
 			{
 				return Invalid(Errors.Expenses.NotFound);
 			}
 
-			string me = _securityService.GetCurrentTeamMemberId();
+			string me =_securityService.GetCurrentTeamMemberId();
 			if (!string.IsNullOrWhiteSpace(me) && expense.TeamMemberId == me)
 			{
 				return Forbidden(Errors.Expenses.CantReviewOwn);
@@ -417,13 +417,13 @@ namespace sma.plan
 		public async Task<IActionResult> RunDeleteExpense(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "expense/{id}/")] HttpRequest req, string id)
 		{
-			Expense expense = _expenseRepo.Get(id);
+			Expense expense = _expenseRepo.Find(id);
 			if (expense == null)
 			{
 				return Invalid(Errors.Expenses.NotFound);
 			}
 
-			bool admin = _securityService.IsCurrentUserAdmin();
+			bool admin =_securityService.IsCurrentUserAdmin();
 			bool mine = expense.TeamMemberId == _securityService.GetCurrentTeamMemberId();
 
 			if (!admin && !mine)
@@ -485,7 +485,7 @@ namespace sma.plan
 		{
 			receipt = null;
 
-			Expense expense = _expenseRepo.Get(id);
+			Expense expense = _expenseRepo.Find(id);
 			if (expense == null || string.IsNullOrWhiteSpace(expense.ReceiptId))
 			{
 				return Invalid(Errors.Expenses.ReceiptNotFound);
@@ -524,7 +524,7 @@ namespace sma.plan
 			expense.Date = date;
 
 			string projectId = form["projectId"];
-			if (string.IsNullOrWhiteSpace(projectId) || _projectRepo.Get(projectId) == null)
+			if (!_projectRepo.Exists(projectId))
 			{
 				return Errors.Expenses.ProjectRequired;
 			}
@@ -533,7 +533,7 @@ namespace sma.plan
 			string taskId = form["projectTaskId"];
 			if (!string.IsNullOrWhiteSpace(taskId))
 			{
-				ProjectTask task = _taskRepo.Get(taskId);
+				ProjectTask task = _taskRepo.Find(taskId);
 				if (task == null || task.ProjectId != projectId)
 				{
 					return Errors.Expenses.SubprojectNotInProject;

@@ -11,6 +11,7 @@ namespace sma.plan
 		Project Create(Project data);
 		Project Delete(string id);
 		Project Get(string id);
+		Project Find(string id);
 		List<Project> GetAll();
 		Tuple<Project, Project> Update(Project data);
 

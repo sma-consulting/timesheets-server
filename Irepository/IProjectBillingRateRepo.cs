@@ -8,6 +8,7 @@ namespace sma.plan
 		ProjectBillingRate Create(ProjectBillingRate data);
 		ProjectBillingRate Delete(string id);
 		ProjectBillingRate Get(string id);
+		ProjectBillingRate Find(string id);
 		Tuple<ProjectBillingRate, ProjectBillingRate> Update(ProjectBillingRate data);
 
 		// A rate list's rows; with `teamMemberIds`, only those people's.

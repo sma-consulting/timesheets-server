@@ -21,7 +21,6 @@ namespace sma.plan
 
 		// Replaces the invoice's work-completed notes, and nothing else.
 		void SetWorkCompleted(string id, List<InvoiceWorkNote> notes);
-		List<Invoice> GetAll();
 		Tuple<Invoice, Invoice> Update(Invoice data);
 
 		// Invoices for lists: everything but the copies kept for their reports

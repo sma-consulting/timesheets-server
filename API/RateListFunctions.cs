@@ -91,7 +91,7 @@ namespace sma.plan
 			{
 				return Invalid(invalid);
 			}
-			RateList list = _listRepo.Get(id);
+			RateList list = _listRepo.Find(id);
 			if (list == null)
 			{
 				return Invalid("That rate list no longer exists.");
@@ -112,7 +112,7 @@ namespace sma.plan
 		public async Task<IActionResult> RunDeleteRateList(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "rateList/{id}/")] HttpRequest req, string id)
 		{
-			if (_listRepo.Get(id) == null)
+			if (!_listRepo.Exists(id))
 			{
 				return Invalid("That rate list no longer exists.");
 			}
@@ -140,7 +140,7 @@ namespace sma.plan
 		public async Task<IActionResult> RunGetRateListRates(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "rateList/{id}/rates/")] HttpRequest req, string id)
 		{
-			if (_listRepo.Get(id) == null)
+			if (!_listRepo.Exists(id))
 			{
 				return Invalid("That rate list no longer exists.");
 			}
@@ -185,7 +185,7 @@ namespace sma.plan
 			{
 				return Invalid("A start date is required.");
 			}
-			if (_listRepo.Get(id) == null)
+			if (!_listRepo.Exists(id))
 			{
 				return Invalid("That rate list no longer exists.");
 			}
@@ -196,7 +196,7 @@ namespace sma.plan
 			foreach (string person in people)
 			{
 				ProjectBillingRate latest = rows.Where(r => r.TeamMemberId == person).OrderBy(r => r.StartDate).LastOrDefault();
-				string who = _memberRepo.Get(person)?.Name;
+				string who = _memberRepo.Find(person)?.Name;
 				if (who == null)
 				{
 					return Invalid("One of those people no longer exists.");
@@ -282,7 +282,7 @@ namespace sma.plan
 					return Invalid(invalid);
 				}
 			}
-			else if (!string.IsNullOrWhiteSpace(use.RateListId) && _listRepo.Get(use.RateListId) == null)
+			else if (!string.IsNullOrWhiteSpace(use.RateListId) && !_listRepo.Exists(use.RateListId))
 			{
 				return Invalid("That rate list no longer exists.");
 			}

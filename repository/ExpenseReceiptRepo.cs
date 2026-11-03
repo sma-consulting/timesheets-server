@@ -62,13 +62,6 @@ namespace sma.plan
 			return deleted;
 		}
 
-		public ExpenseReceipt Find(string id)
-		{
-			return string.IsNullOrWhiteSpace(id)
-				? null
-				: DBCollection.Find(r => r.Id == id).FirstOrDefault();
-		}
-
 		// A SAS link: read-only, for this one file, until `lifetime` is up. The
 		// browser then opens it straight from storage, which names it and shows
 		// it by its type (a PDF in the browser's own viewer).

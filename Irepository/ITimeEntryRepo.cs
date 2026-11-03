@@ -8,12 +8,6 @@ namespace sma.plan
 {
 	internal interface ITimeEntryRepo
 	{
-		TimeEntry Create(TimeEntry data);
-		TimeEntry Delete(string id);
-		TimeEntry Get(string id);
-		List<TimeEntry> GetAll();
-		Tuple<TimeEntry, TimeEntry> Update(TimeEntry data);
-
 		// The entry, or null when there's none with the id (or it isn't an id).
 		TimeEntry Find(string id);
 

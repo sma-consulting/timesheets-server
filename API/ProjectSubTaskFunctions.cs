@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
 using System.IO;
@@ -15,16 +14,13 @@ namespace sma.plan
 
 		private readonly IProjectSubTaskService _projectSubTaskService;
 		private readonly ITimeEntryRepo _timeEntryRepo;
-		private readonly ILogger<ProjectSubTaskFunctions> _logger;
 
 		public ProjectSubTaskFunctions(
 			IProjectSubTaskService projectSubTaskService,
-			ITimeEntryRepo timeEntryRepo,
-			ILogger<ProjectSubTaskFunctions> logger)
+			ITimeEntryRepo timeEntryRepo)
 		{
 			_projectSubTaskService = projectSubTaskService;
 			_timeEntryRepo = timeEntryRepo;
-			_logger = logger;
 		}
 
 		[Allow(Role.Admin)]

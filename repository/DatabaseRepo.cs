@@ -3,7 +3,9 @@ using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace sma.plan
@@ -30,6 +32,17 @@ namespace sma.plan
             return DBCollection.Find(d => d.Id == id).First();
         }
 
+        // Like Get, but null rather than an exception when there's no such
+        // document (or the id isn't one at all) - for "no longer exists" checks.
+        public T Find(string id)
+        {
+            if (!ObjectId.TryParse(id, out _))
+            {
+                return null;
+            }
+            return DBCollection.Find(d => d.Id == id).FirstOrDefault();
+        }
+
         public Tuple<T, T> Update(T data)
         {
             T deleted = Get(data.Id);
@@ -47,6 +60,27 @@ namespace sma.plan
         {
             return ObjectId.TryParse(id, out _)
                 && DBCollection.CountDocuments(d => d.Id == id, new CountOptions { Limit = 1 }) > 0;
+        }
+
+        // Whether the collection has no documents - asks for at most one, loads nothing.
+        public bool IsEmpty()
+        {
+            return DBCollection.CountDocuments(FilterDefinition<T>.Empty, new CountOptions { Limit = 1 }) == 0;
+        }
+
+        // Text fields matched as people type them: ignoring case, with the text
+        // escaped so a "." or "(" in a name means itself. TextContains finds it
+        // anywhere in the field; TextIs is the whole field, give or take spaces
+        // at either end.
+        protected static FilterDefinition<T> TextContains(Expression<Func<T, object>> field, string text)
+        {
+            return Builders<T>.Filter.Regex(field, new BsonRegularExpression(Regex.Escape(text ?? ""), "i"));
+        }
+
+        protected static FilterDefinition<T> TextIs(Expression<Func<T, object>> field, string text)
+        {
+            string exact = Regex.Escape((text ?? "").Trim());
+            return Builders<T>.Filter.Regex(field, new BsonRegularExpression(@"^\s*" + exact + @"\s*$", "i"));
         }
 
         // Ids that aren't ObjectIds can't match anything, and would throw in a filter.

@@ -74,8 +74,6 @@ namespace sma.plan
 
 		public DateOnly? PaymentDate { get; set; }
 
-		public List<InvoiceApproval> Approvals { get; set; } = new List<InvoiceApproval>();
-
 		// The month's time entries on the project, copied in on each save while
 		// the invoice is a draft - what it bills, as it was when billed. Once
 		// issued, these entries can't be changed until the invoice is cancelled.
@@ -231,15 +229,6 @@ namespace sma.plan
 		public string ProjectId { get; set; }
 
 		public string Text { get; set; }
-	}
-
-	// Someone signing the invoice off.
-	internal class InvoiceApproval
-	{
-		[BsonRepresentation(BsonType.ObjectId)]
-		public string UserId { get; set; }
-
-		public DateTime ApprovedAt { get; set; }
 	}
 
 	// A time entry as the invoice billed it.

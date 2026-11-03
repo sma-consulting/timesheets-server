@@ -24,8 +24,7 @@ namespace sma.plan
 		public string McpPrincipalHeader { get; set; }
 	}
 
-	// Runs before every function. This is also where a deny-by-default
-	// security check can go: it sees every request before any endpoint does.
+	// Runs before every function, ahead of SecurityMiddleware's checks.
 	internal class RequestContextMiddleware : IFunctionsWorkerMiddleware
 	{
 		private const string McpToolTrigger = "mcpToolTrigger";

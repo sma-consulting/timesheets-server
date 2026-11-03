@@ -88,10 +88,9 @@ namespace sma.plan
                 return NotIdentified;
             }
 
-            return _customerRepo.GetAll()
-				    .Where(c => (c.Name ?? "").Contains(name, StringComparison.OrdinalIgnoreCase))
-				    .Select(c => new { c.Id, c.Name })
-				    .ToList();
+            return _customerRepo.FindByName(name)
+                .Select(c => new { c.Id, c.Name })
+                .ToList();
         }
         [Allow(Role.Anyone)]
         [Function(nameof(McpFindTeamMember))]
@@ -108,8 +107,7 @@ namespace sma.plan
                 return NotIdentified;
             }
 
-            return _teamMemberRepo.GetAll()
-                .Where(m => (m.Name ?? "").Contains(name, StringComparison.OrdinalIgnoreCase))
+            return _teamMemberRepo.FindByName(name)
                 .Select(m => new { m.Id, m.Name })
                 .ToList();
         }
@@ -135,8 +133,7 @@ namespace sma.plan
 
             // Claude might miss that the client exists: an exact name match
             // returns the existing one instead of a duplicate.
-            Customer existing = _customerRepo.GetAll().FirstOrDefault(c =>
-                string.Equals(c.Name?.Trim(), name?.Trim(), StringComparison.OrdinalIgnoreCase));
+            Customer existing = _customerRepo.GetByName(name);
             if (existing != null)
             {
                 return $"A client named '{existing.Name}' already exists (id {existing.Id}). Use that one.";
@@ -581,8 +578,8 @@ namespace sma.plan
         // no new time. A task with no subproject goes by the project alone.
         private bool SubprojectActive(string subTaskId)
         {
-            string subprojectId = _subTaskRepo.Get(subTaskId)?.ProjectTaskId;
-            return subprojectId == null || _taskRepo.Get(subprojectId)?.Active != false;
+            string subprojectId = _subTaskRepo.Find(subTaskId)?.ProjectTaskId;
+            return subprojectId == null || _taskRepo.Find(subprojectId)?.Active != false;
         }
 
         // Only the subprojects and tasks these entries were logged against, not

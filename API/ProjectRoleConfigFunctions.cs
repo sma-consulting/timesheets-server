@@ -19,16 +19,18 @@ namespace sma.plan
         private readonly ILogger<ProjectRoleConfigFunctions> _logger;
         private readonly IProjectAssignmentRepo _assignmentRepo;
         private readonly ITeamMemberRepo _teamMemberRepo;
-        private readonly DatabaseRepo<ProjectRole> _roleRepo = new DatabaseRepo<ProjectRole>();
+        private readonly IProjectRoleRepo _roleRepo;
 
         public ProjectRoleConfigFunctions(
             ILogger<ProjectRoleConfigFunctions> logger,
             IProjectAssignmentRepo assignmentRepo,
-            ITeamMemberRepo teamMemberRepo)
+            ITeamMemberRepo teamMemberRepo,
+            IProjectRoleRepo roleRepo)
         {
             _logger = logger;
             _assignmentRepo = assignmentRepo;
             _teamMemberRepo = teamMemberRepo;
+            _roleRepo = roleRepo;
         }
 
         [Allow(Role.Admin)]
@@ -148,11 +150,7 @@ namespace sma.plan
             role.Name = role.Name.Trim();
             role.Code = string.IsNullOrWhiteSpace(role.Code) ? null : role.Code.Trim();
 
-            bool taken = _roleRepo.GetAll().Any(r =>
-                r.Id != selfId &&
-                string.Equals(r.Name?.Trim(), role.Name, StringComparison.OrdinalIgnoreCase));
-
-            return taken
+            return _roleRepo.NameTaken(role.Name, selfId)
                 ? string.Format("A role called \"{0}\" already exists.", role.Name)
                 : null;
         }

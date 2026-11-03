@@ -10,9 +10,6 @@ namespace sma.plan
 	{
 		ProjectAssignment Create(ProjectAssignment data);
 		ProjectAssignment Delete(string id);
-		ProjectAssignment Get(string id);
-		List<ProjectAssignment> GetAll();
-		Tuple<ProjectAssignment, ProjectAssignment> Update(ProjectAssignment data);
 		List<ProjectAssignment> GetByProject(string projectId);
 
 		// Everyone's assignments on any of the projects.

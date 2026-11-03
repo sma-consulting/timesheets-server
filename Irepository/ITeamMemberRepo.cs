@@ -11,6 +11,7 @@ namespace sma.plan
 		TeamMember Create(TeamMember data);
 		TeamMember Delete(string id);
 		TeamMember Get(string id);
+		TeamMember Find(string id);
 		List<TeamMember> GetAll();
 		Tuple<TeamMember, TeamMember> Update(TeamMember data);
 		TeamMember GetByUserId(string userId);
@@ -20,6 +21,10 @@ namespace sma.plan
 
 		// The team members with these ids.
 		List<TeamMember> GetByIds(IEnumerable<string> ids);
+
+		// The team members whose name contains the text, ignoring case - with
+		// only their id and name.
+		List<TeamMember> FindByName(string text);
 
 		// How many team members have the role among their AssignedRoles.
 		long CountWithRole(string projectRoleId);

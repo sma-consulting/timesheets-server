@@ -11,7 +11,8 @@ namespace sma.plan
 		private readonly MongoCollectionBase<LegacyProjectFinancials> _legacy =
 			Database.GetCollection<LegacyProjectFinancials>(nameof(Project));
 
-		public ProjectFinancials GetByProject(string projectId)
+		// The project's financials, or null if it has none yet.
+		private ProjectFinancials GetByProject(string projectId)
 		{
 			var filter = Builders<ProjectFinancials>.Filter.Eq(f => f.ProjectId, projectId);
 			return DBCollection.Find(filter).FirstOrDefault();
@@ -54,12 +55,21 @@ namespace sma.plan
 			}
 		}
 
+		// Reads only which projects have financials already, then only the
+		// projects that don't.
 		public void EnsureAllFromLegacy()
 		{
-			HashSet<string> have = GetAll().Select(f => f.ProjectId).ToHashSet();
-			foreach (LegacyProjectFinancials legacy in _legacy.Find(_ => true).ToList())
+			var projectIdOnly = Builders<ProjectFinancials>.Projection.Include(f => f.ProjectId);
+			List<string> have = DBCollection.Find(FilterDefinition<ProjectFinancials>.Empty)
+				.Project<ProjectFinancials>(projectIdOnly)
+				.ToList()
+				.Select(f => f.ProjectId)
+				.ToList();
+
+			var without = Builders<LegacyProjectFinancials>.Filter.Nin(p => p.Id, ValidIds(have));
+			foreach (LegacyProjectFinancials legacy in _legacy.Find(without).ToList())
 			{
-				if (!have.Contains(legacy.Id) && legacy.HasAny())
+				if (legacy.HasAny())
 				{
 					Create(ProjectFinancials.FromLegacy(legacy));
 				}

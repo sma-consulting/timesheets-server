@@ -153,7 +153,7 @@ namespace sma.plan
 				return "Select a project, subproject and task.";
 			}
 
-			ProjectSubTask subTask = _subTaskRepo.Get(timeEntry.ProjectSubTaskId);
+			ProjectSubTask subTask = _subTaskRepo.Find(timeEntry.ProjectSubTaskId);
 
 			if (subTask == null)
 			{
@@ -162,7 +162,7 @@ namespace sma.plan
 
 			ProjectTask task = string.IsNullOrWhiteSpace(subTask.ProjectTaskId)
 				? null
-				: _taskRepo.Get(subTask.ProjectTaskId);
+				: _taskRepo.Find(subTask.ProjectTaskId);
 
 			if (task == null)
 			{

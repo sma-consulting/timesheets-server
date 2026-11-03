@@ -11,6 +11,7 @@ namespace sma.plan
 		ProjectSubTask Create(ProjectSubTask data);
 		ProjectSubTask Delete(string id);
 		ProjectSubTask Get(string id);
+		ProjectSubTask Find(string id);
 		List<ProjectSubTask> GetAll();
 		Tuple<ProjectSubTask, ProjectSubTask> Update(ProjectSubTask data);
 

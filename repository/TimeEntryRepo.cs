@@ -80,15 +80,6 @@ namespace sma.plan
 
 		// A save is one call to the database: unlike Create, Update and Delete,
 		// these don't read the entry before or after.
-		public TimeEntry Find(string id)
-		{
-			if (!ObjectId.TryParse(id, out _))
-			{
-				return null;
-			}
-			return DBCollection.Find(e => e.Id == id).FirstOrDefault();
-		}
-
 		public TimeEntry Insert(TimeEntry data)
 		{
 			DBCollection.InsertOne(data);

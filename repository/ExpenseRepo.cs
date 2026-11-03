@@ -8,21 +8,9 @@ namespace sma.plan
 {
 	internal class ExpenseRepo : DatabaseRepo<Expense>, IExpenseRepo
 	{
-		public List<Expense> GetByTeamMember(string teamMemberId)
-		{
-			var filter = Builders<Expense>.Filter.Eq(e => e.TeamMemberId, teamMemberId);
-			return DBCollection.Find(filter).ToList();
-		}
-
 		public List<Expense> GetByIds(IEnumerable<string> ids)
 		{
 			var filter = Builders<Expense>.Filter.In(e => e.Id, ValidIds(ids));
-			return DBCollection.Find(filter).SortBy(e => e.Id).ToList();
-		}
-
-		public List<Expense> GetByProjects(IEnumerable<string> projectIds)
-		{
-			var filter = Builders<Expense>.Filter.In(e => e.ProjectId, ValidIds(projectIds));
 			return DBCollection.Find(filter).SortBy(e => e.Id).ToList();
 		}
 

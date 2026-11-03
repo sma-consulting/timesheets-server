@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
 using System.Globalization;
@@ -17,12 +16,10 @@ namespace sma.plan
 		public const int MaxLockMonths = 24;
 
 		private readonly ITimeEntryService _timeEntryService;
-		private readonly ILogger<TimeEntryFunctions> _logger;
 
-		public TimeEntryFunctions(ITimeEntryService timeEntryService, ILogger<TimeEntryFunctions> logger)
+		public TimeEntryFunctions(ITimeEntryService timeEntryService)
 		{
 			_timeEntryService = timeEntryService;
-			_logger = logger;
 		}
 
 		[Allow(Role.SignedIn)]

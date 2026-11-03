@@ -61,7 +61,7 @@ namespace sma.plan
 				return Forbidden();
 			}
 
-			Project project = _projectRepo.Get(projectId);
+			Project project = _projectRepo.Find(projectId);
 			if (project == null)
 			{
 				return Invalid("That project doesn't exist.");
@@ -196,13 +196,13 @@ namespace sma.plan
 		public async Task<IActionResult> RunUpdateProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectBillingRate/{id}/update/")] HttpRequest req, string id)
 		{
-			ProjectBillingRate existing = _rateRepo.Get(id);
+			ProjectBillingRate existing = _rateRepo.Find(id);
 			if (existing == null)
 			{
 				return Invalid("That billing rate no longer exists.");
 			}
 
-			ProjectBillingRate rate = JsonConvert.DeserializeObject<ProjectBillingRate>(
+			ProjectBillingRate rate =JsonConvert.DeserializeObject<ProjectBillingRate>(
 				await new StreamReader(req.Body).ReadToEndAsync());
 			if (rate == null)
 			{
@@ -245,13 +245,13 @@ namespace sma.plan
 		public async Task<IActionResult> RunDeleteProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectBillingRate/{id}/")] HttpRequest req, string id)
 		{
-			ProjectBillingRate existing = _rateRepo.Get(id);
+			ProjectBillingRate existing = _rateRepo.Find(id);
 			if (existing == null)
 			{
 				return Invalid("That billing rate no longer exists.");
 			}
 
-			List<ProjectBillingRate> timeline = _rateRepo.GetByList(existing.RateListId, new[] { existing.TeamMemberId })
+			List<ProjectBillingRate> timeline =_rateRepo.GetByList(existing.RateListId, new[] { existing.TeamMemberId })
 				.OrderBy(r => r.StartDate)
 				.ToList();
 
@@ -279,12 +279,12 @@ namespace sma.plan
 				return "No billing rate was sent.";
 			}
 
-			if (string.IsNullOrWhiteSpace(rate.RateListId) || _listRepo.Get(rate.RateListId) == null)
+			if (!_listRepo.Exists(rate.RateListId))
 			{
 				return "That rate list doesn't exist.";
 			}
 
-			if (string.IsNullOrWhiteSpace(rate.TeamMemberId) || _memberRepo.Get(rate.TeamMemberId) == null)
+			if (!_memberRepo.Exists(rate.TeamMemberId))
 			{
 				return "Select a person.";
 			}

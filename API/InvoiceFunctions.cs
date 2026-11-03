@@ -90,7 +90,6 @@ namespace sma.plan
 			invoice.CancelledBy = null;
 			invoice.Paid = false;
 			invoice.PaymentDate = null;
-			invoice.Approvals = new List<InvoiceApproval>();
 			// Written on the Reports page once the invoice exists.
 			invoice.WorkCompleted = new List<InvoiceWorkNote>();
 			invoice.TimeEntries = TimeEntriesFor(invoice);
@@ -230,7 +229,6 @@ namespace sma.plan
 			invoice.CancelledBy = stored.CancelledBy;
 			invoice.Paid = stored.Paid;
 			invoice.PaymentDate = stored.PaymentDate;
-			invoice.Approvals = stored.Approvals ?? new List<InvoiceApproval>();
 			// Written on the Reports page, not the invoice's own editor.
 			invoice.WorkCompleted = stored.WorkCompleted ?? new List<InvoiceWorkNote>();
 			// A draft bills its period's hours as they are now.

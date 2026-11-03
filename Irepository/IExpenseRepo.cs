@@ -8,15 +8,11 @@ namespace sma.plan
 		Expense Create(Expense data);
 		Expense Delete(string id);
 		Expense Get(string id);
-		List<Expense> GetAll();
+		Expense Find(string id);
 		Tuple<Expense, Expense> Update(Expense data);
-		List<Expense> GetByTeamMember(string teamMemberId);
 
 		// The expenses with these ids.
 		List<Expense> GetByIds(IEnumerable<string> ids);
-
-		// The expenses on any of the projects.
-		List<Expense> GetByProjects(IEnumerable<string> projectIds);
 
 		// The expenses matching every filter given - one team member's, on one
 		// project, dated from/to (inclusive), with one status - each null to

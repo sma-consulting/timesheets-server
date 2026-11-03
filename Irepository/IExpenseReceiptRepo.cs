@@ -10,7 +10,6 @@ namespace sma.plan
 		ExpenseReceipt Create(ExpenseReceipt data);
 		// Removes the receipt and its file.
 		ExpenseReceipt Delete(string id);
-		ExpenseReceipt Get(string id);
 		// The receipt, or null if there's none with that id.
 		ExpenseReceipt Find(string id);
 		// A read-only link straight to the receipt's file in blob storage, for

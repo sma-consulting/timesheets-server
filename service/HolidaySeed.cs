@@ -60,7 +60,7 @@ namespace sma.plan
 
 		public static void Run(IHolidayRepo repo)
 		{
-			if (repo.GetAll().Count > 0)
+			if (!repo.IsEmpty())
 			{
 				return;
 			}

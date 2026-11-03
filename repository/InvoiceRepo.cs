@@ -76,17 +76,6 @@ namespace sma.plan
 				.Max();
 		}
 
-		// Like Get, but null rather than an exception when there's no such invoice
-		// (or the id isn't one at all).
-		public Invoice Find(string id)
-		{
-			if (!ObjectId.TryParse(id, out _))
-			{
-				return null;
-			}
-			return DBCollection.Find(i => i.Id == id).FirstOrDefault();
-		}
-
 		public List<Invoice> GetSummaries(IEnumerable<string>? projectIds, bool issuedOnly,
 			DateOnly? from = null, DateOnly? to = null, bool includeOpen = false)
 		{

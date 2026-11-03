@@ -29,6 +29,15 @@ namespace sma.plan
 			return DBCollection.CountDocuments(filter);
 		}
 
+		public List<TeamMember> FindByName(string text)
+		{
+			var idAndName = Builders<TeamMember>.Projection.Include(t => t.Name);
+			return DBCollection.Find(TextContains(t => t.Name, text))
+				.Project<TeamMember>(idAndName)
+				.SortBy(t => t.Id)
+				.ToList();
+		}
+
 		public List<TeamMember> GetStaff()
 		{
 			var filter = Builders<TeamMember>.Filter.Ne(t => t.UserId, null);

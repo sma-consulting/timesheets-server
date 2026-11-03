@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
 using System.IO;
@@ -12,14 +11,10 @@ namespace sma.plan
 	internal class ProjectAssignmentFunctions : RequestHandler
 	{
 		private readonly IProjectAssignmentService _projectAssignmentService;
-		private readonly ILogger<ProjectAssignmentFunctions> _logger;
 
-		public ProjectAssignmentFunctions(
-			IProjectAssignmentService projectAssignmentService,
-			ILogger<ProjectAssignmentFunctions> logger)
+		public ProjectAssignmentFunctions(IProjectAssignmentService projectAssignmentService)
 		{
 			_projectAssignmentService = projectAssignmentService;
-			_logger = logger;
 		}
 
 		[Allow(Role.Admin)]

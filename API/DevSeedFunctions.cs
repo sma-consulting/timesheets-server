@@ -58,7 +58,7 @@ namespace sma.plan
 
 			// Read before the wipe, which takes the caller's records with it.
 			string email = _securityService.GetCurrentEmail();
-			string name = _teamMemberRepo.Get(_securityService.GetCurrentTeamMemberId())?.Name ?? email;
+			string name = _teamMemberRepo.Find(_securityService.GetCurrentTeamMemberId())?.Name ?? email;
 
 			return Ok(
 				() =>

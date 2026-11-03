@@ -14,18 +14,20 @@ namespace sma.plan
 		private ISecurityService _securityService;
 		private IProjectAssignmentRepo _assignmentRepo;
 		private ITeamMemberRepo _teamMemberRepo;
-		private readonly DatabaseRepo<ProjectRole> _roleRepo = new DatabaseRepo<ProjectRole>();
+		private IProjectRoleRepo _roleRepo;
 
 		public ProjectService(
 			IProjectRepo repo,
 			ISecurityService securityService,
 			IProjectAssignmentRepo assignmentRepo,
-			ITeamMemberRepo teamMemberRepo)
+			ITeamMemberRepo teamMemberRepo,
+			IProjectRoleRepo roleRepo)
 		{
 			_repo = repo;
 			_securityService = securityService;
 			_assignmentRepo = assignmentRepo;
 			_teamMemberRepo = teamMemberRepo;
+			_roleRepo = roleRepo;
 		}
 
 		// Visibility is project-level even though assignments are made against
@@ -182,7 +184,7 @@ namespace sma.plan
 			}
 			// Also skips the "Select project manager..." placeholder, which
 			// isn't a real person.
-			if (_teamMemberRepo.Get(managerId) == null)
+			if (!_teamMemberRepo.Exists(managerId))
 			{
 				return;
 			}
@@ -204,11 +206,8 @@ namespace sma.plan
 		// its name - or, if there isn't one yet, a new one.
 		private ProjectRole ProjectManagerRole()
 		{
-			ProjectRole role = _roleRepo.GetAll().FirstOrDefault(r =>
-				string.Equals(r.Code?.Trim(), "PM", StringComparison.OrdinalIgnoreCase) ||
-				string.Equals(r.Name?.Trim(), "Project Manager", StringComparison.OrdinalIgnoreCase));
-
-			return role ?? _roleRepo.Create(new ProjectRole { Name = "Project Manager", Code = "PM" });
+			return _roleRepo.GetProjectManager()
+				?? _roleRepo.Create(new ProjectRole { Name = "Project Manager", Code = "PM" });
 		}
 
 		// PaidTimeOff stays as stored: the project page doesn't send it, and

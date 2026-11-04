@@ -137,6 +137,11 @@ namespace sma.plan
 		// report is often finished then.
 		public List<InvoiceWorkNote> WorkCompleted { get; set; } = new List<InvoiceWorkNote>();
 
+		// On a draft: the project managers asked to approve it, one each with the
+		// projects of theirs it bills. It's approved once every one has. Empty
+		// until an admin asks; set only by the approval endpoints, never by a save.
+		public List<InvoiceApproval> Approvals { get; set; } = new List<InvoiceApproval>();
+
 		// ProjectIds, or ProjectId alone on an older invoice.
 		public List<string> AllProjectIds() =>
 			ProjectIds != null && ProjectIds.Count > 0 ? ProjectIds : new List<string> { ProjectId };
@@ -220,6 +225,32 @@ namespace sma.plan
 		public string Label { get; set; }
 
 		public decimal? Percent { get; set; }
+	}
+
+	// One project manager's say on a draft: waiting to be asked again, approved,
+	// or changes asked for - with what to change.
+	internal class InvoiceApproval
+	{
+		public const string StatusRequested = "Requested";
+		public const string StatusApproved = "Approved";
+		public const string StatusChangesRequested = "ChangesRequested";
+
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string ProjectManagerId { get; set; }
+
+		// The projects of theirs on the invoice.
+		public List<string> ProjectIds { get; set; } = new List<string>();
+
+		public string Status { get; set; } = StatusRequested;
+
+		// What to change, when they asked for changes.
+		public string Comment { get; set; }
+
+		public DateTime RequestedAt { get; set; }
+
+		public string RequestedBy { get; set; }
+
+		public DateTime? DecidedAt { get; set; }
 	}
 
 	// One project's "work completed this period" on an invoice.

@@ -77,7 +77,7 @@ namespace sma.plan
 		}
 
 		public List<Invoice> GetSummaries(IEnumerable<string>? projectIds, bool issuedOnly,
-			DateOnly? from = null, DateOnly? to = null, bool includeOpen = false)
+			DateOnly? from = null, DateOnly? to = null, bool includeOpen = false, string approverId = null)
 		{
 			var f = Builders<Invoice>.Filter;
 			var filter = f.Empty;
@@ -89,7 +89,10 @@ namespace sma.plan
 			}
 			if (issuedOnly)
 			{
-				filter &= f.Eq(i => i.Issued, true);
+				var issued = f.Eq(i => i.Issued, true);
+				filter &= approverId != null && ObjectId.TryParse(approverId, out _)
+					? issued | f.ElemMatch(i => i.Approvals, a => a.ProjectManagerId == approverId)
+					: issued;
 			}
 
 			// Still open: neither paid nor cancelled. Ne ("not true"), so an
@@ -182,6 +185,31 @@ namespace sma.plan
 				.Include(i => i.Cancelled)
 				.Include(i => i.WorkCompleted);
 			return DBCollection.Find(i => i.Id == id).Project<Invoice>(notesOnly).FirstOrDefault();
+		}
+
+		// One update in the database: nothing else on the invoice is read or
+		// written.
+		public void SetApprovals(string id, List<InvoiceApproval> approvals)
+		{
+			DBCollection.UpdateOne(
+				Builders<Invoice>.Filter.Eq(i => i.Id, id),
+				Builders<Invoice>.Update.Set(i => i.Approvals, approvals));
+		}
+
+		// Counted in the database. Ne ("not true"), so an invoice saved before
+		// those flags existed still counts.
+		public long CountAwaitingApproval(string approverId)
+		{
+			if (!ObjectId.TryParse(approverId, out _))
+			{
+				return 0;
+			}
+			var f = Builders<Invoice>.Filter;
+			return DBCollection.CountDocuments(
+				f.Ne(i => i.Issued, true)
+				& f.Ne(i => i.Cancelled, true)
+				& f.ElemMatch(i => i.Approvals,
+					a => a.ProjectManagerId == approverId && a.Status == InvoiceApproval.StatusRequested));
 		}
 
 		// One update in the database: nothing else on the invoice is read or

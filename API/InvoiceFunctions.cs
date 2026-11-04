@@ -92,6 +92,8 @@ namespace sma.plan
 			invoice.PaymentDate = null;
 			// Written on the Reports page once the invoice exists.
 			invoice.WorkCompleted = new List<InvoiceWorkNote>();
+			// Asked for once it's saved (RequestInvoiceApproval).
+			invoice.Approvals = new List<InvoiceApproval>();
 			invoice.TimeEntries = TimeEntriesFor(invoice);
 			ClearBilledProject(invoice);
 
@@ -105,7 +107,8 @@ namespace sma.plan
 
 
 		// Any invoice for an admin; for a project manager, an issued one billing
-		// a project they manage - the whole invoice, as the client got it.
+		// a project they manage - the whole invoice, as the client got it - or a
+		// draft they've been asked to approve.
 		[Allow(Role.SignedIn)]
 		[Function("GetInvoice")]
 		public async Task<IActionResult> RunGetInvoice(
@@ -123,7 +126,7 @@ namespace sma.plan
 
 			Invoice stored = _invoiceRepo.Find(id);
 			HashSet<string> managed = _projectService.ManagedProjectIds();
-			if (stored == null || !stored.Issued || !stored.AllProjectIds().Any(managed.Contains))
+			if (stored == null || !(stored.Issued || AskedOf(stored) != null) || !stored.AllProjectIds().Any(managed.Contains))
 			{
 				return Forbidden("That invoice isn't on a project you manage.");
 			}
@@ -143,8 +146,8 @@ namespace sma.plan
 		// the month billed - with ?includeOpen=true adding every invoice still
 		// open (not paid, not cancelled) whatever its month, so a range never
 		// hides what's still owed. Any invoice for an admin. A project manager
-		// gets the issued ones - sent, paid or cancelled, never drafts - on the
-		// projects they manage; anyone else, none.
+		// gets the issued ones - sent, paid or cancelled - on the projects they
+		// manage, and the drafts they've been asked to approve; anyone else, none.
 		[Allow(Role.SignedIn)]
 		[Function("GetAllInvoice")]
 		public async Task<IActionResult> RunGetAllInvoice(
@@ -172,7 +175,8 @@ namespace sma.plan
 			HashSet<string> managed = _projectService.ManagedProjectIds();
 			IEnumerable<string> theirs = projectId == null ? managed : managed.Where(id => id == projectId);
 			return Ok(
-				() => _invoiceRepo.GetSummaries(theirs, issuedOnly: true, from, to, includeOpen),
+				() => _invoiceRepo.GetSummaries(theirs, issuedOnly: true, from, to, includeOpen,
+					approverId: _securityService.GetCurrentTeamMemberId()),
 				(i) => new
 				{
 					invoiceList = i
@@ -231,6 +235,17 @@ namespace sma.plan
 			invoice.PaymentDate = stored.PaymentDate;
 			// Written on the Reports page, not the invoice's own editor.
 			invoice.WorkCompleted = stored.WorkCompleted ?? new List<InvoiceWorkNote>();
+			// The project managers asked stay asked, but what they said was about
+			// the invoice as it was: each waits for them to look again.
+			invoice.Approvals = (stored.Approvals ?? new List<InvoiceApproval>())
+				.Select(a =>
+				{
+					a.Status = InvoiceApproval.StatusRequested;
+					a.Comment = null;
+					a.DecidedAt = null;
+					return a;
+				})
+				.ToList();
 			// A draft bills its period's hours as they are now.
 			invoice.TimeEntries = TimeEntriesFor(invoice);
 			ClearBilledProject(invoice);
@@ -468,6 +483,144 @@ namespace sma.plan
 		}
 
 		private const int MaxWorkCompletedLength = 4000;
+
+
+		// Asks the project managers of a draft's projects to approve it: one
+		// approval each, with the projects of theirs it bills. Asking again
+		// starts them all over - after the draft's changed as they asked, say.
+		[Allow(Role.Admin)]
+		[Function("RequestInvoiceApproval")]
+		public async Task<IActionResult> RunRequestInvoiceApproval(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "invoice/{id}/requestApproval/")] HttpRequest req, string id)
+		{
+			Invoice stored = _invoiceRepo.Find(id);
+			if (stored == null)
+			{
+				return Invalid("That invoice no longer exists.");
+			}
+			if (stored.Issued || stored.Cancelled)
+			{
+				return Invalid("Only a draft is approved by its project managers.");
+			}
+
+			List<Project> projects = _projectRepo.GetByIds(stored.AllProjectIds());
+			List<InvoiceApproval> approvals = projects
+				.Where(p => !string.IsNullOrEmpty(p.ProjectManagerId))
+				.GroupBy(p => p.ProjectManagerId)
+				.Select(g => new InvoiceApproval
+				{
+					ProjectManagerId = g.Key,
+					ProjectIds = g.Select(p => p.Id).ToList(),
+					Status = InvoiceApproval.StatusRequested,
+					RequestedAt = DateTime.UtcNow,
+					RequestedBy = _securityService.GetCurrentUserId(),
+				})
+				.ToList();
+			if (approvals.Count == 0)
+			{
+				return Invalid("None of this invoice's projects has a project manager to approve it.");
+			}
+
+			return Ok(
+				() =>
+				{
+					_invoiceRepo.SetApprovals(id, approvals);
+					return approvals;
+				},
+				(a) => new
+				{
+					approvals = a
+				});
+		}
+
+
+		// A project manager's say on a draft they were asked to approve:
+		// { "approved": true } or { "approved": false, "comment": "what to
+		// change" }. Only their own approval changes.
+		[Allow(Role.SignedIn)]
+		[Function("DecideInvoiceApproval")]
+		public async Task<IActionResult> RunDecideInvoiceApproval(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "invoice/{id}/approval/")] HttpRequest req, string id)
+		{
+			ApprovalDecision decision = JsonConvert.DeserializeObject<ApprovalDecision>(
+				await new StreamReader(req.Body).ReadToEndAsync());
+			if (decision == null)
+			{
+				return Invalid("Say whether you approve it.");
+			}
+			string comment = (decision.Comment ?? "").Trim();
+			if (!decision.Approved && comment.Length == 0)
+			{
+				return Invalid("Say what needs changing.");
+			}
+			if (comment.Length > MaxWorkCompletedLength)
+			{
+				return Invalid(string.Format("Keep the comment under {0} characters.", MaxWorkCompletedLength));
+			}
+
+			Invoice stored = _invoiceRepo.Find(id);
+			if (stored == null)
+			{
+				return Invalid("That invoice no longer exists.");
+			}
+			InvoiceApproval mine = AskedOf(stored);
+			if (mine == null)
+			{
+				return Forbidden("You haven't been asked to approve that invoice.");
+			}
+			if (stored.Issued || stored.Cancelled)
+			{
+				return Invalid("That invoice has already been issued or cancelled.");
+			}
+
+			mine.Status = decision.Approved ? InvoiceApproval.StatusApproved : InvoiceApproval.StatusChangesRequested;
+			mine.Comment = decision.Approved ? null : comment;
+			mine.DecidedAt = DateTime.UtcNow;
+
+			return Ok(
+				() =>
+				{
+					_invoiceRepo.SetApprovals(id, stored.Approvals);
+					return stored.Approvals;
+				},
+				(a) => new
+				{
+					approvals = a
+				});
+		}
+
+		private class ApprovalDecision
+		{
+			public bool Approved { get; set; }
+
+			public string Comment { get; set; }
+		}
+
+
+		// How many drafts wait for the signed-in project manager to approve
+		// them, for the Invoices menu item.
+		[Allow(Role.SignedIn)]
+		[Function("CountInvoicesAwaitingMyApproval")]
+		public async Task<IActionResult> RunCountInvoicesAwaitingMyApproval(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "invoice/awaitingMyApproval/")] HttpRequest req)
+		{
+			return Ok(
+				() => _invoiceRepo.CountAwaitingApproval(_securityService.GetCurrentTeamMemberId()),
+				(n) => new
+				{
+					count = n
+				});
+		}
+
+		// The signed-in person's approval on the invoice, or null if they
+		// weren't asked.
+		private InvoiceApproval AskedOf(Invoice invoice)
+		{
+			string me = _securityService.GetCurrentTeamMemberId();
+			return string.IsNullOrEmpty(me)
+				? null
+				: (invoice.Approvals ?? new List<InvoiceApproval>()).FirstOrDefault(a => a.ProjectManagerId == me);
+		}
 
 		// The ids of the expenses an invoice bills.
 		private static HashSet<string> ExpenseIdsOf(Invoice invoice)

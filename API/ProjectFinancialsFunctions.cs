@@ -44,6 +44,9 @@ namespace sma.plan
 		// With them, each project's approved billable expenses not yet invoiced:
 		// part of what it has to bill, which a manager can't add up for
 		// themselves, as other people's expenses aren't theirs to read.
+		//
+		// ?projectId= narrows it to one project - a progress report's budget -
+		// so nothing else is read.
 		[Allow(Role.SignedIn)]
 		[Function("GetAllProjectFinancials")]
 		public async Task<IActionResult> RunGetAllProjectFinancials(
@@ -51,7 +54,14 @@ namespace sma.plan
 		{
 			bool admin = _securityService.IsCurrentUserAdmin();
 			HashSet<string> managed = admin ? null : _projectService.ManagedProjectIds();
-			bool Visible(string projectId) => admin || managed.Contains(projectId ?? "");
+			string projectId = QueryValue(req, "projectId");
+			if (projectId != null && !admin && !managed.Contains(projectId))
+			{
+				return Forbidden(Errors.Expenses.NotYourProject);
+			}
+			// The projects asked about: one, or every one this person may see
+			// (null: all of them).
+			IEnumerable<string> scope = projectId != null ? new[] { projectId } : managed;
 
 			return Ok(
 				() =>
@@ -60,13 +70,13 @@ namespace sma.plan
 					{
 						// Financials still on project documents from before they had
 						// their own are copied across first.
-						_financialsRepo.EnsureAllFromLegacy();
+						if (projectId == null) _financialsRepo.EnsureAllFromLegacy();
+						else _financialsRepo.EnsureFromLegacy(projectId);
 					}
 					return new
 					{
-						financialsList = _financialsRepo.GetAll().Where(f => Visible(f.ProjectId)).ToList(),
-						uninvoicedExpenseList = _expenseRepo.GetAll()
-							.Where(e => e.Status == Expense.StatusApproved && e.Billable && !e.Invoiced && Visible(e.ProjectId))
+						financialsList = scope == null ? _financialsRepo.GetAll() : _financialsRepo.GetByProjects(scope),
+						uninvoicedExpenseList = _expenseRepo.GetUninvoicedBillable(scope)
 							.GroupBy(e => e.ProjectId)
 							.Select(g => new
 							{
@@ -93,7 +103,7 @@ namespace sma.plan
 			{
 				return Invalid("The financials are missing.");
 			}
-			if (!_projectRepo.GetAll().Any(p => p.Id == projectId))
+			if (!_projectRepo.Exists(projectId))
 			{
 				return Invalid("That project no longer exists.");
 			}

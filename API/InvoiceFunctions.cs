@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 namespace sma.plan
 {
 	// Invoices, made and changed by admins. A project manager may look at the
-	// issued ones on the projects they manage, but not change them. The page
+	// issued ones billing a project they manage, but not change them. The page
 	// sends the invoice as edited; the server alone sets its number, who
 	// created it and when, its status, and the time entries it bills, whatever
 	// the request says.
@@ -66,24 +66,17 @@ namespace sma.plan
 			{
 				return Invalid(invalid);
 			}
-
-			if (!_projectRepo.GetAll().Any(p => p.Id == invoice.ProjectId))
-			{
-				return Invalid("That project no longer exists.");
-			}
-
-			invoice.Month = LastDayOf(invoice.Month);
-			invalid = SetDates(invoice);
+			invalid = ResolveProjects(invoice, out List<ProjectTask> subprojects);
 			if (invalid != null)
 			{
 				return Invalid(invalid);
 			}
 
-			Invoice other = InvoiceFor(invoice.ProjectId, invoice.Month);
-			if (other != null)
+			invoice.Month = LastDayOf(invoice.Month);
+			invalid = SetPeriod(invoice) ?? SetDates(invoice) ?? AlreadyInvoiced(invoice, subprojects);
+			if (invalid != null)
 			{
-				return Invalid(string.Format(
-					"This project already has an invoice for {0}: {1}.", MonthName(invoice.Month), other.Number));
+				return Invalid(invalid);
 			}
 
 			invoice.CreatedAt = DateTime.UtcNow;
@@ -97,6 +90,9 @@ namespace sma.plan
 			invoice.CancelledBy = null;
 			invoice.Paid = false;
 			invoice.PaymentDate = null;
+			// Written on the Reports page once the invoice exists.
+			invoice.WorkCompleted = new List<InvoiceWorkNote>();
+			// Asked for once it's saved (RequestInvoiceApproval).
 			invoice.Approvals = new List<InvoiceApproval>();
 			invoice.TimeEntries = TimeEntriesFor(invoice);
 			ClearBilledProject(invoice);
@@ -110,8 +106,9 @@ namespace sma.plan
 		}
 
 
-		// Any invoice for an admin; for a project manager, an issued one on a
-		// project they manage.
+		// Any invoice for an admin; for a project manager, an issued one billing
+		// a project they manage - the whole invoice, as the client got it - or a
+		// draft they've been asked to approve.
 		[Allow(Role.SignedIn)]
 		[Function("GetInvoice")]
 		public async Task<IActionResult> RunGetInvoice(
@@ -128,7 +125,8 @@ namespace sma.plan
 			}
 
 			Invoice stored = _invoiceRepo.Find(id);
-			if (stored == null || !stored.Issued || !_projectService.ManagedProjectIds().Contains(stored.ProjectId))
+			HashSet<string> managed = _projectService.ManagedProjectIds();
+			if (stored == null || !(stored.Issued || AskedOf(stored) != null) || !stored.AllProjectIds().Any(managed.Contains))
 			{
 				return Forbidden("That invoice isn't on a project you manage.");
 			}
@@ -142,18 +140,32 @@ namespace sma.plan
 		}
 
 
-		// Every invoice for an admin. A project manager gets the issued ones -
-		// sent, paid or cancelled, never drafts - on the projects they manage;
-		// anyone else, none.
+		// Invoices for lists, as summaries: everything but the copies kept for
+		// their reports, which come with the invoice itself (GetInvoice).
+		// Narrowed by ?projectId=, ?issued=true, and ?from=&to= (yyyy-MM-dd) on
+		// the month billed - with ?includeOpen=true adding every invoice still
+		// open (not paid, not cancelled) whatever its month, so a range never
+		// hides what's still owed. Any invoice for an admin. A project manager
+		// gets the issued ones - sent, paid or cancelled - on the projects they
+		// manage, and the drafts they've been asked to approve; anyone else, none.
 		[Allow(Role.SignedIn)]
 		[Function("GetAllInvoice")]
 		public async Task<IActionResult> RunGetAllInvoice(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "invoice/")] HttpRequest req)
 		{
+			ApiError badDates = ReadDateRange(req, out DateOnly? from, out DateOnly? to);
+			if (badDates != null)
+			{
+				return Invalid(badDates);
+			}
+			string projectId = QueryValue(req, "projectId");
+			bool issuedOnly = string.Equals(QueryValue(req, "issued"), "true", StringComparison.OrdinalIgnoreCase);
+			bool includeOpen = string.Equals(QueryValue(req, "includeOpen"), "true", StringComparison.OrdinalIgnoreCase);
+
 			if (_securityService.IsCurrentUserAdmin())
 			{
 				return Ok(
-					() => _invoiceRepo.GetAll(),
+					() => _invoiceRepo.GetSummaries(projectId == null ? null : new[] { projectId }, issuedOnly, from, to, includeOpen),
 					(i) => new
 					{
 						invoiceList = i
@@ -161,10 +173,10 @@ namespace sma.plan
 			}
 
 			HashSet<string> managed = _projectService.ManagedProjectIds();
+			IEnumerable<string> theirs = projectId == null ? managed : managed.Where(id => id == projectId);
 			return Ok(
-				() => WithBilledCopies(_invoiceRepo.GetAll()
-					.Where(i => i.Issued && managed.Contains(i.ProjectId))
-					.ToList()),
+				() => _invoiceRepo.GetSummaries(theirs, issuedOnly: true, from, to, includeOpen,
+					approverId: _securityService.GetCurrentTeamMemberId()),
 				(i) => new
 				{
 					invoiceList = i
@@ -172,8 +184,8 @@ namespace sma.plan
 		}
 
 
-		// Saves changes to a draft. Its project and month, and everything the
-		// server sets, stay as they were.
+		// Saves changes to a draft. What it bills and its month, and everything
+		// the server sets, stay as they were.
 		[Allow(Role.Admin)]
 		[Function("UpdateInvoice")]
 		public async Task<IActionResult> RunUpdateInvoice(
@@ -198,7 +210,11 @@ namespace sma.plan
 			}
 			invoice.Id = id;
 			invoice.ProjectId = stored.ProjectId;
+			invoice.ProjectIds = stored.ProjectIds ?? new List<string>();
+			invoice.ProjectTaskIds = stored.ProjectTaskIds ?? new List<string>();
 			invoice.Month = stored.Month;
+			invoice.PeriodStart = stored.PeriodStart;
+			invoice.PeriodEnd = stored.PeriodEnd;
 
 			string invalid = Validate(invoice) ?? SetDates(invoice);
 			if (invalid != null)
@@ -217,8 +233,20 @@ namespace sma.plan
 			invoice.CancelledBy = stored.CancelledBy;
 			invoice.Paid = stored.Paid;
 			invoice.PaymentDate = stored.PaymentDate;
-			invoice.Approvals = stored.Approvals ?? new List<InvoiceApproval>();
-			// A draft bills the month's hours as they are now.
+			// Written on the Reports page, not the invoice's own editor.
+			invoice.WorkCompleted = stored.WorkCompleted ?? new List<InvoiceWorkNote>();
+			// The project managers asked stay asked, but what they said was about
+			// the invoice as it was: each waits for them to look again.
+			invoice.Approvals = (stored.Approvals ?? new List<InvoiceApproval>())
+				.Select(a =>
+				{
+					a.Status = InvoiceApproval.StatusRequested;
+					a.Comment = null;
+					a.DecidedAt = null;
+					return a;
+				})
+				.ToList();
+			// A draft bills its period's hours as they are now.
 			invoice.TimeEntries = TimeEntriesFor(invoice);
 			ClearBilledProject(invoice);
 
@@ -284,7 +312,7 @@ namespace sma.plan
 			stored.IssuedBy = _securityService.GetCurrentUserId();
 			stored.TimeEntries = TimeEntriesFor(stored);
 			CopyBilledProject(stored);
-			CopyBilledExpenses(stored, _expenseRepo.GetAll());
+			CopyBilledExpenses(stored, _expenseRepo.GetByIds(ExpenseIdsOf(stored)));
 
 			return Ok(
 				() =>
@@ -398,6 +426,202 @@ namespace sma.plan
 			public DateOnly? PaymentDate { get; set; }
 		}
 
+
+		// One project's "work completed this period" for its progress report:
+		// { "projectId": ..., "text": ... }. On a draft or an issued invoice -
+		// the report is often finished after issuing - but not a cancelled one.
+		// Only the notes are read and written.
+		[Allow(Role.Admin)]
+		[Function("SaveInvoiceWorkCompleted")]
+		public async Task<IActionResult> RunSaveInvoiceWorkCompleted(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "invoice/{id}/workCompleted/")] HttpRequest req, string id)
+		{
+			InvoiceWorkNote note = JsonConvert.DeserializeObject<InvoiceWorkNote>(
+				await new StreamReader(req.Body).ReadToEndAsync());
+			if (note == null || string.IsNullOrWhiteSpace(note.ProjectId))
+			{
+				return Invalid("Say which project the work is for.");
+			}
+			string text = (note.Text ?? "").Trim();
+			if (text.Length > MaxWorkCompletedLength)
+			{
+				return Invalid(string.Format("Keep the work completed under {0} characters.", MaxWorkCompletedLength));
+			}
+
+			Invoice stored = _invoiceRepo.FindWorkCompleted(id);
+			if (stored == null)
+			{
+				return Invalid("That invoice no longer exists.");
+			}
+			if (stored.Cancelled)
+			{
+				return Invalid("A cancelled invoice can't be changed.");
+			}
+			if (!stored.AllProjectIds().Contains(note.ProjectId))
+			{
+				return Invalid("That project isn't on this invoice.");
+			}
+
+			List<InvoiceWorkNote> notes = (stored.WorkCompleted ?? new List<InvoiceWorkNote>())
+				.Where(n => n.ProjectId != note.ProjectId)
+				.ToList();
+			if (text.Length > 0)
+			{
+				notes.Add(new InvoiceWorkNote { ProjectId = note.ProjectId, Text = text });
+			}
+
+			return Ok(
+				() =>
+				{
+					_invoiceRepo.SetWorkCompleted(id, notes);
+					return notes;
+				},
+				(n) => new
+				{
+					workCompleted = n
+				});
+		}
+
+		private const int MaxWorkCompletedLength = 4000;
+
+
+		// Asks the project managers of a draft's projects to approve it: one
+		// approval each, with the projects of theirs it bills. Asking again
+		// starts them all over - after the draft's changed as they asked, say.
+		[Allow(Role.Admin)]
+		[Function("RequestInvoiceApproval")]
+		public async Task<IActionResult> RunRequestInvoiceApproval(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "invoice/{id}/requestApproval/")] HttpRequest req, string id)
+		{
+			Invoice stored = _invoiceRepo.Find(id);
+			if (stored == null)
+			{
+				return Invalid("That invoice no longer exists.");
+			}
+			if (stored.Issued || stored.Cancelled)
+			{
+				return Invalid("Only a draft is approved by its project managers.");
+			}
+
+			List<Project> projects = _projectRepo.GetByIds(stored.AllProjectIds());
+			List<InvoiceApproval> approvals = projects
+				.Where(p => !string.IsNullOrEmpty(p.ProjectManagerId))
+				.GroupBy(p => p.ProjectManagerId)
+				.Select(g => new InvoiceApproval
+				{
+					ProjectManagerId = g.Key,
+					ProjectIds = g.Select(p => p.Id).ToList(),
+					Status = InvoiceApproval.StatusRequested,
+					RequestedAt = DateTime.UtcNow,
+					RequestedBy = _securityService.GetCurrentUserId(),
+				})
+				.ToList();
+			if (approvals.Count == 0)
+			{
+				return Invalid("None of this invoice's projects has a project manager to approve it.");
+			}
+
+			return Ok(
+				() =>
+				{
+					_invoiceRepo.SetApprovals(id, approvals);
+					return approvals;
+				},
+				(a) => new
+				{
+					approvals = a
+				});
+		}
+
+
+		// A project manager's say on a draft they were asked to approve:
+		// { "approved": true } or { "approved": false, "comment": "what to
+		// change" }. Only their own approval changes.
+		[Allow(Role.SignedIn)]
+		[Function("DecideInvoiceApproval")]
+		public async Task<IActionResult> RunDecideInvoiceApproval(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "invoice/{id}/approval/")] HttpRequest req, string id)
+		{
+			ApprovalDecision decision = JsonConvert.DeserializeObject<ApprovalDecision>(
+				await new StreamReader(req.Body).ReadToEndAsync());
+			if (decision == null)
+			{
+				return Invalid("Say whether you approve it.");
+			}
+			string comment = (decision.Comment ?? "").Trim();
+			if (!decision.Approved && comment.Length == 0)
+			{
+				return Invalid("Say what needs changing.");
+			}
+			if (comment.Length > MaxWorkCompletedLength)
+			{
+				return Invalid(string.Format("Keep the comment under {0} characters.", MaxWorkCompletedLength));
+			}
+
+			Invoice stored = _invoiceRepo.Find(id);
+			if (stored == null)
+			{
+				return Invalid("That invoice no longer exists.");
+			}
+			InvoiceApproval mine = AskedOf(stored);
+			if (mine == null)
+			{
+				return Forbidden("You haven't been asked to approve that invoice.");
+			}
+			if (stored.Issued || stored.Cancelled)
+			{
+				return Invalid("That invoice has already been issued or cancelled.");
+			}
+
+			mine.Status = decision.Approved ? InvoiceApproval.StatusApproved : InvoiceApproval.StatusChangesRequested;
+			mine.Comment = decision.Approved ? null : comment;
+			mine.DecidedAt = DateTime.UtcNow;
+
+			return Ok(
+				() =>
+				{
+					_invoiceRepo.SetApprovals(id, stored.Approvals);
+					return stored.Approvals;
+				},
+				(a) => new
+				{
+					approvals = a
+				});
+		}
+
+		private class ApprovalDecision
+		{
+			public bool Approved { get; set; }
+
+			public string Comment { get; set; }
+		}
+
+
+		// How many drafts wait for the signed-in project manager to approve
+		// them, for the Invoices menu item.
+		[Allow(Role.SignedIn)]
+		[Function("CountInvoicesAwaitingMyApproval")]
+		public async Task<IActionResult> RunCountInvoicesAwaitingMyApproval(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "invoice/awaitingMyApproval/")] HttpRequest req)
+		{
+			return Ok(
+				() => _invoiceRepo.CountAwaitingApproval(_securityService.GetCurrentTeamMemberId()),
+				(n) => new
+				{
+					count = n
+				});
+		}
+
+		// The signed-in person's approval on the invoice, or null if they
+		// weren't asked.
+		private InvoiceApproval AskedOf(Invoice invoice)
+		{
+			string me = _securityService.GetCurrentTeamMemberId();
+			return string.IsNullOrEmpty(me)
+				? null
+				: (invoice.Approvals ?? new List<InvoiceApproval>()).FirstOrDefault(a => a.ProjectManagerId == me);
+		}
+
 		// The ids of the expenses an invoice bills.
 		private static HashSet<string> ExpenseIdsOf(Invoice invoice)
 		{
@@ -417,7 +641,7 @@ namespace sma.plan
 				return;
 			}
 
-			foreach (Expense expense in _expenseRepo.GetAll().Where(e => ids.Contains(e.Id)))
+			foreach (Expense expense in _expenseRepo.GetByIds(ids))
 			{
 				if (expense.Invoiced != invoiced)
 				{
@@ -433,10 +657,6 @@ namespace sma.plan
 			{
 				return "The invoice is missing.";
 			}
-			if (string.IsNullOrWhiteSpace(invoice.ProjectId))
-			{
-				return "Choose the project the invoice is for.";
-			}
 			if (invoice.Month == default)
 			{
 				return "Choose the month the invoice is for.";
@@ -451,15 +671,44 @@ namespace sma.plan
 			return null;
 		}
 
-		// An invoice is always dated the last day of the month it bills. With
-		// terms (Net 30) its due date is that many days later; a due date set by
-		// hand (no terms) is kept as sent, but can't come before the invoice date.
+		// A period other than the whole month, when one was sent: both days, the
+		// first no later than the last. Month becomes the month it ends in. A
+		// period that's just the whole month is kept as Month alone.
+		private static string SetPeriod(Invoice invoice)
+		{
+			if (invoice.PeriodStart == null && invoice.PeriodEnd == null)
+			{
+				return null;
+			}
+			if (invoice.PeriodStart == null || invoice.PeriodEnd == null)
+			{
+				return "Choose the first and the last day the invoice is for.";
+			}
+			if (invoice.PeriodStart > invoice.PeriodEnd)
+			{
+				return "The invoice's first day can't be after its last.";
+			}
+
+			invoice.Month = LastDayOf(invoice.PeriodEnd.Value);
+			if (invoice.PeriodStart == new DateOnly(invoice.Month.Year, invoice.Month.Month, 1)
+				&& invoice.PeriodEnd == invoice.Month)
+			{
+				invoice.PeriodStart = null;
+				invoice.PeriodEnd = null;
+			}
+			return null;
+		}
+
+		// An invoice is always dated the last day it bills - its month's, for a
+		// whole month. With terms (Net 30) its due date is that many days later;
+		// a due date set by hand (no terms) is kept as sent, but can't come
+		// before the invoice date.
 		private static string SetDates(Invoice invoice)
 		{
-			invoice.InvoiceDate = invoice.Month;
+			invoice.InvoiceDate = invoice.To();
 			if (invoice.Terms.HasValue)
 			{
-				invoice.DueDate = invoice.Month.AddDays(invoice.Terms.Value);
+				invoice.DueDate = invoice.To().AddDays(invoice.Terms.Value);
 			}
 			if (invoice.DueDate.HasValue && invoice.DueDate < invoice.InvoiceDate)
 			{
@@ -468,40 +717,106 @@ namespace sma.plan
 			return null;
 		}
 
-		// The project's invoice for the month, if it has one. Cancelled ones don't
-		// count: cancelling frees the month for a new invoice.
-		private Invoice InvoiceFor(string projectId, DateOnly month)
+		// What a new invoice bills: the subprojects chosen - all of ProjectId's
+		// when none are - and from them its projects, which must exist and, more
+		// than one, all be for the same client. The page's project stays first.
+		// Returns why not, or null.
+		private string ResolveProjects(Invoice invoice, out List<ProjectTask> subprojects)
 		{
-			return _invoiceRepo.GetAll()
-				.FirstOrDefault(i => !i.Cancelled && i.ProjectId == projectId && i.Month == month);
+			List<string> taskIds = (invoice.ProjectTaskIds ?? new List<string>())
+				.Where(id => !string.IsNullOrWhiteSpace(id))
+				.Distinct()
+				.ToList();
+			if (taskIds.Count > 0)
+			{
+				subprojects = _taskRepo.GetByIds(taskIds);
+				if (subprojects.Count != taskIds.Count)
+				{
+					return "One of those subprojects no longer exists.";
+				}
+			}
+			else if (!string.IsNullOrWhiteSpace(invoice.ProjectId))
+			{
+				subprojects = _taskRepo.GetByProjects(new[] { invoice.ProjectId });
+				taskIds = subprojects.Select(t => t.Id).ToList();
+			}
+			else
+			{
+				subprojects = new List<ProjectTask>();
+				return "Choose what the invoice is for.";
+			}
+
+			List<string> projectIds = (subprojects.Count > 0 ? subprojects.Select(t => t.ProjectId) : new[] { invoice.ProjectId })
+				.Where(id => !string.IsNullOrWhiteSpace(id))
+				.Distinct()
+				.OrderBy(id => id == invoice.ProjectId ? 0 : 1)
+				.ToList();
+			List<Project> projects = _projectRepo.GetByIds(projectIds);
+			if (projectIds.Count == 0 || projects.Count != projectIds.Count)
+			{
+				return "That project no longer exists.";
+			}
+			if (projects.Count > 1
+				&& (projects.Any(p => string.IsNullOrWhiteSpace(p.CustomerId))
+					|| projects.Select(p => p.CustomerId).Distinct().Count() > 1))
+			{
+				return "The projects on one invoice must all be for the same client.";
+			}
+
+			invoice.ProjectTaskIds = taskIds;
+			invoice.ProjectIds = projectIds;
+			invoice.ProjectId = projectIds[0];
+			return null;
 		}
 
-		// The project's time entries in the invoice's month.
+		// A subproject is on one invoice for any day. Cancelled ones don't count:
+		// cancelling frees their days for a new invoice. Returns why not, or null.
+		private string AlreadyInvoiced(Invoice invoice, List<ProjectTask> subprojects)
+		{
+			Invoice other = _invoiceRepo
+				.ActiveCovering(invoice.From(), invoice.To(), invoice.ProjectIds, invoice.ProjectTaskIds, null)
+				.FirstOrDefault();
+			if (other == null)
+			{
+				return null;
+			}
+
+			// An older invoice bills all of its project.
+			bool older = other.ProjectTaskIds == null || other.ProjectTaskIds.Count == 0;
+			ProjectTask taken = subprojects.FirstOrDefault(t =>
+				older ? t.ProjectId == other.ProjectId : other.ProjectTaskIds.Contains(t.Id));
+			return taken == null
+				? string.Format("This project already has an invoice for {0}: {1}.", PeriodName(other), other.Number)
+				: string.Format("{0} is already on invoice {1} for {2}.", taken.Name, other.Number, PeriodName(other));
+		}
+
+		// The time an invoice bills: its subprojects' entries in its period - on
+		// an older invoice, all of its project's.
 		private List<UserTimeEntry> TimeEntriesFor(Invoice invoice)
 		{
-			DateOnly first = new DateOnly(invoice.Month.Year, invoice.Month.Month, 1);
-			return _timeEntryRepo.GetAll()
-				.Where(e => e.ProjectId == invoice.ProjectId && e.Date >= first && e.Date <= invoice.Month)
+			List<TimeEntry> entries = invoice.ProjectTaskIds != null && invoice.ProjectTaskIds.Count > 0
+				? _timeEntryRepo.GetOnTasks(invoice.ProjectTaskIds, invoice.From(), invoice.To())
+				: _timeEntryRepo.GetFiltered(null, invoice.ProjectId, invoice.From(), invoice.To(), null, null);
+			return entries
 				.OrderBy(e => e.Date)
 				.Select(UserTimeEntry.From)
 				.ToList();
 		}
 
 		// Copies what priced and grouped the invoice's hours, as it is at issue:
-		// the project's assignments, billing rates, tasks and sub-tasks.
+		// its projects' assignments, billing rates (each project's rate list's,
+		// tagged with the project), tasks and sub-tasks.
 		private void CopyBilledProject(Invoice invoice)
 		{
-			string projectId = invoice.ProjectId;
-			invoice.BilledAssignments = _assignmentRepo.GetByProject(projectId);
-			invoice.BilledRates = _rateRepo.GetByProject(projectId);
-			invoice.BilledTasks = _taskRepo.GetAll().Where(t => t.ProjectId == projectId).ToList();
+			List<string> projectIds = invoice.AllProjectIds();
+			invoice.BilledAssignments = _assignmentRepo.GetByProjects(projectIds);
+			invoice.BilledRates = _rateRepo.GetForProjects(_projectRepo.GetByIds(projectIds));
+			invoice.BilledTasks = _taskRepo.GetByProjects(projectIds);
 
 			// A sub-task's ProjectId is missing on older records, so its task
 			// decides too.
 			HashSet<string> taskIds = invoice.BilledTasks.Select(t => t.Id).ToHashSet();
-			invoice.BilledSubTasks = _subTaskRepo.GetAll()
-				.Where(s => s.ProjectId == projectId || taskIds.Contains(s.ProjectTaskId))
-				.ToList();
+			invoice.BilledSubTasks = _subTaskRepo.GetInProjects(projectIds, taskIds);
 		}
 
 		// Copies the expenses the invoice bills, as they are at issue.
@@ -538,7 +853,8 @@ namespace sma.plan
 				}
 				if ((invoice.BilledExpenses?.Count ?? 0) == 0 && ExpenseIdsOf(invoice).Count > 0)
 				{
-					expenses ??= _expenseRepo.GetAll();
+					// Just the expenses these invoices bill, in one read.
+					expenses ??= _expenseRepo.GetByIds(invoices.SelectMany(i => ExpenseIdsOf(i)));
 					CopyBilledExpenses(invoice, expenses);
 				}
 			}
@@ -551,9 +867,12 @@ namespace sma.plan
 			return new DateOnly(date.Year, date.Month, DateTime.DaysInMonth(date.Year, date.Month));
 		}
 
-		private static string MonthName(DateOnly month)
+		// "October 2026", or for another period "Feb 1, 2025 – Feb 20, 2025".
+		private static string PeriodName(Invoice invoice)
 		{
-			return month.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+			return invoice.PeriodStart == null
+				? invoice.Month.ToString("MMMM yyyy", CultureInfo.InvariantCulture)
+				: string.Format(CultureInfo.InvariantCulture, "{0:MMM d, yyyy} – {1:MMM d, yyyy}", invoice.From(), invoice.To());
 		}
 	}
 }

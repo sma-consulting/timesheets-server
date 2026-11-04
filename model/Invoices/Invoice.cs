@@ -6,18 +6,38 @@ using System.Collections.Generic;
 
 namespace sma.plan
 {
-	// A project's invoice for one calendar month. Built on the Invoices page from
-	// the month's hours and expenses, then edited there; what's saved is the
-	// invoice as edited, so its figures never move once it's sent, whatever
-	// happens to the time entries or rates later.
+	// An invoice for a calendar month, or another period, to one client: the
+	// subprojects it bills, from one or more of that client's projects. Built on
+	// the Invoices page from the period's hours and expenses, then edited there;
+	// what's saved is the invoice as edited, so its figures never move once it's sent,
+	// whatever happens to the time entries or rates later.
 	internal class Invoice : GeneralModel
 	{
+		// The first of its projects.
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string ProjectId { get; set; }
 
+		// Every project it bills, ProjectId first, and the subprojects it bills
+		// from them. Both empty on invoices made before one could bill several:
+		// those bill all of ProjectId (see AllProjectIds).
+		public List<string> ProjectIds { get; set; } = new List<string>();
+
+		public List<string> ProjectTaskIds { get; set; } = new List<string>();
+
 		// The month billed, kept as its last day: 2026-09-30 is September 2026.
-		// One invoice per project per month, not counting cancelled ones.
+		// For another period, the month it ends in - where lists, exports and
+		// Financials put it.
 		public DateOnly Month { get; set; }
+
+		// The days billed when they aren't just Month: part of a month, or
+		// several. Both empty for a whole month, as on every older invoice (see
+		// From and To). A subproject is on one invoice for any day, not counting
+		// cancelled ones.
+		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public DateOnly? PeriodStart { get; set; }
+
+		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public DateOnly? PeriodEnd { get; set; }
 
 		// Given by the server when the invoice is first saved: one past the
 		// highest so far, carrying on from SMA's own numbering (Access's InvoiceID).
@@ -53,8 +73,6 @@ namespace sma.plan
 		public bool Paid { get; set; }
 
 		public DateOnly? PaymentDate { get; set; }
-
-		public List<InvoiceApproval> Approvals { get; set; } = new List<InvoiceApproval>();
 
 		// The month's time entries on the project, copied in on each save while
 		// the invoice is a draft - what it bills, as it was when billed. Once
@@ -105,11 +123,38 @@ namespace sma.plan
 
 		public List<InvoiceLine> Lines { get; set; } = new List<InvoiceLine>();
 
+		// How its hours are listed: "costCode", a line per subproject (as the
+		// spec and SMA's Harvest invoices have it), or "person", a line per
+		// person and rate. Chosen on the page; empty on older invoices.
+		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public string LinesBy { get; set; }
+
 		public List<InvoiceTax> Taxes { get; set; } = new List<InvoiceTax>();
+
+		// What was done in the period, a note per project it bills, for that
+		// project's progress report. Written on the Reports page, and kept when
+		// the invoice is saved or issued - it can change after issuing, as the
+		// report is often finished then.
+		public List<InvoiceWorkNote> WorkCompleted { get; set; } = new List<InvoiceWorkNote>();
+
+		// On a draft: the project managers asked to approve it, one each with the
+		// projects of theirs it bills. It's approved once every one has. Empty
+		// until an admin asks; set only by the approval endpoints, never by a save.
+		public List<InvoiceApproval> Approvals { get; set; } = new List<InvoiceApproval>();
+
+		// ProjectIds, or ProjectId alone on an older invoice.
+		public List<string> AllProjectIds() =>
+			ProjectIds != null && ProjectIds.Count > 0 ? ProjectIds : new List<string> { ProjectId };
+
+		// The first and last day billed: the period, or the whole of Month.
+		public DateOnly From() => PeriodStart ?? new DateOnly(Month.Year, Month.Month, 1);
+
+		public DateOnly To() => PeriodEnd ?? Month;
 	}
 
-	// A row of the invoice table: a person's hours at their rate, the flat
-	// disbursement, an expense at cost, a lump-sum fee or a line added by hand.
+	// A row of the invoice table: a person's hours at their rate, a cost code's
+	// hours at its people's rates, the flat disbursement, an expense at cost, a
+	// lump-sum fee or a line added by hand.
 	// Which fields a row has depends on its kind, so empty ones are left out
 	// rather than stored or sent as null - the page tells the kinds apart by
 	// what's there.
@@ -117,6 +162,11 @@ namespace sma.plan
 	{
 		// The page's own key for the row.
 		public string Id { get; set; }
+
+		// The project the row bills. Empty on older invoices, whose rows are all
+		// the invoice's ProjectId.
+		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public string ProjectId { get; set; }
 
 		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
 		public string Kind { get; set; }
@@ -137,9 +187,19 @@ namespace sma.plan
 		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
 		public decimal? CalculatedRate { get; set; }
 
-		// Set instead of quantity × rate on a lump-sum fee or an expense.
+		// Set instead of quantity × rate on a lump-sum fee, an expense, or a cost
+		// code's hours (its people bill at different rates).
 		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
 		public decimal? Amount { get; set; }
+
+		// A cost code's amount as the timesheets priced it, before any change on
+		// the invoice.
+		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public decimal? CalculatedAmount { get; set; }
+
+		// The subproject (cost code) a cost code row bills.
+		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+		public string ProjectTaskId { get; set; }
 
 		// The flat disbursement's percentage of the other lines.
 		[BsonIgnoreIfNull, JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
@@ -167,13 +227,39 @@ namespace sma.plan
 		public decimal? Percent { get; set; }
 	}
 
-	// Someone signing the invoice off.
+	// One project manager's say on a draft: waiting to be asked again, approved,
+	// or changes asked for - with what to change.
 	internal class InvoiceApproval
 	{
-		[BsonRepresentation(BsonType.ObjectId)]
-		public string UserId { get; set; }
+		public const string StatusRequested = "Requested";
+		public const string StatusApproved = "Approved";
+		public const string StatusChangesRequested = "ChangesRequested";
 
-		public DateTime ApprovedAt { get; set; }
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string ProjectManagerId { get; set; }
+
+		// The projects of theirs on the invoice.
+		public List<string> ProjectIds { get; set; } = new List<string>();
+
+		public string Status { get; set; } = StatusRequested;
+
+		// What to change, when they asked for changes.
+		public string Comment { get; set; }
+
+		public DateTime RequestedAt { get; set; }
+
+		public string RequestedBy { get; set; }
+
+		public DateTime? DecidedAt { get; set; }
+	}
+
+	// One project's "work completed this period" on an invoice.
+	internal class InvoiceWorkNote
+	{
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string ProjectId { get; set; }
+
+		public string Text { get; set; }
 	}
 
 	// A time entry as the invoice billed it.
@@ -184,6 +270,10 @@ namespace sma.plan
 
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string TeamMemberId { get; set; }
+
+		// Empty on older invoices: the invoice's ProjectId.
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string ProjectId { get; set; }
 
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string ProjectTaskId { get; set; }
@@ -205,6 +295,7 @@ namespace sma.plan
 			{
 				TimeEntryId = entry.Id,
 				TeamMemberId = entry.TeamMemberId,
+				ProjectId = entry.ProjectId,
 				ProjectTaskId = entry.ProjectTaskId,
 				ProjectSubTaskId = entry.ProjectSubTaskId,
 				Date = entry.Date,

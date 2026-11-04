@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
 using System.IO;
@@ -14,23 +13,17 @@ namespace sma.plan
 	{
 
 		private readonly IProjectTaskService _projectTaskService;
-		private readonly ISecurityService _securityService;
 		private readonly ITimeEntryRepo _timeEntryRepo;
 		private readonly IProjectSubTaskRepo _subTaskRepo;
-		private readonly ILogger<ProjectTaskFunctions> _logger;
 
 		public ProjectTaskFunctions(
 			IProjectTaskService projectTaskService,
-			ISecurityService securityService,
 			ITimeEntryRepo timeEntryRepo,
-			IProjectSubTaskRepo subTaskRepo,
-			ILogger<ProjectTaskFunctions> logger)
+			IProjectSubTaskRepo subTaskRepo)
 		{
 			_projectTaskService = projectTaskService;
-			_securityService = securityService;
 			_timeEntryRepo = timeEntryRepo;
 			_subTaskRepo = subTaskRepo;
-			_logger = logger;
 		}
 
 		[Allow(Role.Admin)]
@@ -58,19 +51,11 @@ namespace sma.plan
 		public async Task<IActionResult> RunDeleteProjectTask(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectTask/{id}/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
-			var subTaskIds = _subTaskRepo.GetAll()
-				.Where(s => s.ProjectTaskId == id)
+			var subTaskIds = _subTaskRepo.GetByTask(id)
 				.Select(s => s.Id)
 				.ToList();
 
-			int logged = _timeEntryRepo.GetAll().Count(t =>
-				t.ProjectTaskId == id ||
-				(t.ProjectSubTaskId != null && subTaskIds.Contains(t.ProjectSubTaskId)));
+			long logged = _timeEntryRepo.CountLoggedAgainst(new[] { id }, subTaskIds);
 
 			if (logged > 0)
 			{

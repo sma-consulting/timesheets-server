@@ -61,9 +61,22 @@ namespace sma.plan
 		// The project's budget, disbursement rate and the rest of its financials
 		// are in ProjectFinancials: admins only, and saved on their own.
 
+		// The rate list its hours are priced from (RateList), often shared with
+		// the other projects on its contract. Null until one is chosen. Set on
+		// its own (RateListFunctions); a project save keeps it as stored.
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string RateListId { get; set; }
+
 		// Derived from ProjectType on every save (false only for NonBillable), so
 		// the two can't disagree.
 		public bool Billable { get; set; } = true;
+
+		// "Z Paid Hours Off": the project everyone logs vacation, leave, stat
+		// holidays and lunch breaks to (see PaidTimeOffSeed). Anyone signed in may
+		// log time to it without being assigned, and it can't be deleted. Set
+		// only by the seed - ProjectService keeps it as stored, whatever a save
+		// sends.
+		public bool PaidTimeOff { get; set; }
 
 		public List<ProjectPhase> Phases { get; set; } = new List<ProjectPhase>();
 	}

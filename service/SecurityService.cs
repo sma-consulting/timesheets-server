@@ -26,6 +26,16 @@ namespace sma.plan {
 		public string Val { get; set; }
 	}
 
+	// Sandbox only: the roles a tester can pick in the app's "Testing as" menu.
+	internal static class SandboxRoles
+	{
+		public const string Employee = "employee";
+		public const string ProjectManager = "pm";
+		public const string Admin = "admin";
+
+		public static readonly string[] All = { Employee, ProjectManager, Admin };
+	}
+
 	internal class SecurityService : ISecurityService
 	{
 		private const string EmailUriClaim = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
@@ -40,6 +50,10 @@ namespace sma.plan {
 		private HttpContext _httpContext => _request.HttpContext;
 		private ClaimsPrincipal _principal => _request.HttpContext?.User;
 
+		// The caller, once found. One SecurityService per request (scoped), so it
+		// never outlives the request it was looked up for.
+		private Caller _current;
+
 		public SecurityService(RequestContext request, IUserRepo userRepo, ITeamMemberRepo teamMemberRepo)
 		{
 			_request = request;
@@ -47,39 +61,77 @@ namespace sma.plan {
 			_teamMemberRepo = teamMemberRepo;
 		}
 
+		// Who's calling. Looked up on first use and kept for the rest of the
+		// request - saving one time entry asks about ten times. Only a caller who
+		// was found is kept: "nobody" is looked up again next time, so a sign-in
+		// that creates the User part-way through a request is seen straight away.
+		public Caller Current
+		{
+			get
+			{
+				if (_current != null)
+				{
+					return _current;
+				}
+
+				Caller resolved = Resolve();
+				if (resolved != Caller.Nobody)
+				{
+					_current = resolved;
+				}
+				return resolved;
+			}
+		}
+
+		private Caller Resolve()
+		{
+			string email = GetCurrentEmail()?.Trim();
+			if (string.IsNullOrWhiteSpace(email))
+			{
+				return Caller.Nobody;
+			}
+
+			User user = _userRepo.GetByEmail(email);
+			if (user == null)
+			{
+				return Caller.Nobody;
+			}
+
+			// Testing as another role on the sandbox: an admin only as "Admin",
+			// whatever the person really is.
+			string testRole = TestRole();
+
+			return new Caller
+			{
+				Email = email,
+				UserId = user.Id,
+				TeamMemberId = _teamMemberRepo.GetByUserId(user.Id)?.Id,
+				IsAdmin = testRole != null ? testRole == SandboxRoles.Admin : HasAdminPrivilege(user),
+			};
+		}
+
+		// Compared case-insensitively on purpose: privileges are typed into Mongo
+		// by hand, and "Admin" silently failing to grant admin is a very expensive
+		// typo to debug.
+		private static bool HasAdminPrivilege(User user)
+		{
+			return user.Privileges != null &&
+				user.Privileges.Any(p =>
+					string.Equals(p?.Trim(), User.AdminPrivilege, StringComparison.OrdinalIgnoreCase));
+		}
+
 		// The TeamMember representing the caller - what time entries are owned by.
 		// Null when nobody can be identified, or when the User has no TeamMember.
 		public string GetCurrentTeamMemberId()
 		{
-			var email = GetCurrentEmail();
-
-			if (string.IsNullOrWhiteSpace(email))
-			{
-				return null;
-			}
-
-			User user = _userRepo.GetByEmail(email.Trim());
-
-			if (user == null)
-			{
-				return null;
-			}
-
-			return _teamMemberRepo.GetByUserId(user.Id)?.Id;
+			return Current.TeamMemberId;
 		}
 
 		// The caller's User - the login itself, which an admin always has even
 		// without a TeamMember. Null when nobody can be identified.
 		public string GetCurrentUserId()
 		{
-			var email = GetCurrentEmail();
-
-			if (string.IsNullOrWhiteSpace(email))
-			{
-				return null;
-			}
-
-			return _userRepo.GetByEmail(email.Trim())?.Id;
+			return Current.UserId;
 		}
 
 		// Admin is a flag on the User record, resolved from whoever the current
@@ -93,14 +145,15 @@ namespace sma.plan {
 				return false;
 			}
 
-			User user = _userRepo.GetByEmail(email.Trim());
+			// Testing as another role on the sandbox: an admin only as "Admin",
+			// whatever the person really is - even before they have a User.
+			string testRole = TestRole();
+			if (testRole != null)
+			{
+				return testRole == SandboxRoles.Admin;
+			}
 
-			// Compared case-insensitively on purpose: privileges are typed into
-			// Mongo by hand, and "Admin" silently failing to grant admin is a very
-			// expensive typo to debug.
-			return user != null && user.Privileges != null &&
-				user.Privileges.Any(p =>
-					string.Equals(p?.Trim(), User.AdminPrivilege, StringComparison.OrdinalIgnoreCase));
+			return Current.IsAdmin;
 		}
 
 		// Easy Auth never runs on localhost, so there is no header to decode while
@@ -124,15 +177,29 @@ namespace sma.plan {
 				return string.IsNullOrWhiteSpace(fromHeader) ? localTestEmail : fromHeader;
 			}
 
-			if (_httpContext == null ||
-				!_httpContext.Request.Headers.TryGetValue("x-ms-client-principal", out var headerValues))
+			// A website request brings Easy Auth's header itself. A Claude (MCP)
+			// tool call isn't a website request, so RequestContextMiddleware hands
+			// its header over instead.
+			string principalHeader =
+				_httpContext != null && _httpContext.Request.Headers.TryGetValue("x-ms-client-principal", out var headerValues)
+					? headerValues.First()
+					: _request.McpPrincipalHeader;
+
+			return EmailFromPrincipal(principalHeader);
+		}
+
+		// Decodes the x-ms-client-principal header - base64 JSON - and returns the
+		// first claim that holds an email. Null when there isn't one.
+		private static string EmailFromPrincipal(string principalHeader)
+		{
+			if (string.IsNullOrWhiteSpace(principalHeader))
 			{
 				return null;
 			}
 
 			try
 			{
-				var json = Encoding.UTF8.GetString(Convert.FromBase64String(headerValues.First()));
+				var json = Encoding.UTF8.GetString(Convert.FromBase64String(principalHeader));
 				var principal = JsonConvert.DeserializeObject<ClientPrincipalDto>(json);
 
 				if (principal?.Claims == null)
@@ -163,14 +230,32 @@ namespace sma.plan {
 			}
 		}
 
+		// The sandbox's "Testing as" switch, on only where SANDBOX_ROLE_SWITCH is
+		// "true". Set it on the sandbox Function App alone - NEVER in production,
+		// where it would let anyone make themselves an admin.
+		public bool RoleSwitchEnabled()
+		{
+			return string.Equals(
+				Environment.GetEnvironmentVariable("SANDBOX_ROLE_SWITCH"), "true", StringComparison.OrdinalIgnoreCase);
+		}
+
+		// The role a tester picked, which the app sends as x-sandbox-role. Null
+		// when the switch is off, when none was picked, and for anything but a
+		// website request (Claude's tool calls keep the person's real role).
+		public string TestRole()
+		{
+			if (!RoleSwitchEnabled())
+			{
+				return null;
+			}
+
+			string role = _httpContext?.Request.Headers["x-sandbox-role"].FirstOrDefault()?.Trim().ToLowerInvariant();
+			return SandboxRoles.All.Contains(role) ? role : null;
+		}
+
 		public string WhoAmI()
 		{
 			return _principal?.GetUserName();
-		}
-
-		public bool AuthorizeUser()
-		{
-			return true;
 		}
 	}
 }

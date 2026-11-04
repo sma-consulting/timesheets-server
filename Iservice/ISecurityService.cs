@@ -9,13 +9,17 @@ namespace sma.plan
 {
 	internal interface ISecurityService
 	{
-
 		string WhoAmI();
-		public bool AuthorizeUser();
 		string GetCurrentEmail();
 		bool IsCurrentUserAdmin();
+
 		string GetCurrentTeamMemberId();
 		string GetCurrentUserId();
+
+		// Sandbox only: the "Testing as" switch, and the role picked in it
+		// (SandboxRoles), or null. See SecurityService.
+		bool RoleSwitchEnabled();
+		string TestRole();
 
 	}
 }

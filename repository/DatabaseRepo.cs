@@ -1,8 +1,11 @@
-﻿using MongoDB.Driver;
+﻿using MongoDB.Bson;
+using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace sma.plan
@@ -29,6 +32,17 @@ namespace sma.plan
             return DBCollection.Find(d => d.Id == id).First();
         }
 
+        // Like Get, but null rather than an exception when there's no such
+        // document (or the id isn't one at all) - for "no longer exists" checks.
+        public T Find(string id)
+        {
+            if (!ObjectId.TryParse(id, out _))
+            {
+                return null;
+            }
+            return DBCollection.Find(d => d.Id == id).FirstOrDefault();
+        }
+
         public Tuple<T, T> Update(T data)
         {
             T deleted = Get(data.Id);
@@ -39,6 +53,91 @@ namespace sma.plan
         public List<T> GetAll()
         {
             return DBCollection.Find(_ => true).ToList();
+        }
+
+        // Whether a document with the id exists - asks the database, loads nothing.
+        public bool Exists(string id)
+        {
+            return ObjectId.TryParse(id, out _)
+                && DBCollection.CountDocuments(d => d.Id == id, new CountOptions { Limit = 1 }) > 0;
+        }
+
+        // Whether the collection has no documents - asks for at most one, loads nothing.
+        public bool IsEmpty()
+        {
+            return DBCollection.CountDocuments(FilterDefinition<T>.Empty, new CountOptions { Limit = 1 }) == 0;
+        }
+
+        // Text fields matched as people type them: ignoring case, with the text
+        // escaped so a "." or "(" in a name means itself. TextContains finds it
+        // anywhere in the field; TextIs is the whole field, give or take spaces
+        // at either end.
+        protected static FilterDefinition<T> TextContains(Expression<Func<T, object>> field, string text)
+        {
+            return Builders<T>.Filter.Regex(field, new BsonRegularExpression(Regex.Escape(text ?? ""), "i"));
+        }
+
+        protected static FilterDefinition<T> TextIs(Expression<Func<T, object>> field, string text)
+        {
+            string exact = Regex.Escape((text ?? "").Trim());
+            return Builders<T>.Filter.Regex(field, new BsonRegularExpression(@"^\s*" + exact + @"\s*$", "i"));
+        }
+
+        // Ids that aren't ObjectIds can't match anything, and would throw in a filter.
+        protected static List<string> ValidIds(IEnumerable<string> ids)
+        {
+            return (ids ?? Enumerable.Empty<string>())
+                .Where(id => ObjectId.TryParse(id, out _))
+                .ToList();
+        }
+
+        // Past this many months a range is narrowed by year only (see DateBetween).
+        private const int MaxMonthsInDateFilter = 24;
+
+        // A filter for a DateOnly `field` between `from` and `to` (inclusive; a
+        // null bound leaves that side open). Dates are stored as { Year, Month,
+        // Day } documents, which the database isn't relied on to compare as a
+        // whole, so the range is asked for month by month on those parts: each
+        // month's Year and Month, with Day bounded in the first and last. A long
+        // or open range is narrowed by year only. Either way the query can
+        // return a little more than the range, never less - callers check the
+        // exact range again in C#.
+        protected static FilterDefinition<T> DateBetween(string field, DateOnly? from, DateOnly? to)
+        {
+            var f = Builders<T>.Filter;
+            string year = field + ".Year", month = field + ".Month", day = field + ".Day";
+
+            if (from == null && to == null)
+            {
+                return f.Empty;
+            }
+            if (from == null || to == null)
+            {
+                return from != null ? f.Gte(year, from.Value.Year) : f.Lte(year, to.Value.Year);
+            }
+
+            DateOnly first = from.Value, last = to.Value;
+            int months = (last.Year - first.Year) * 12 + last.Month - first.Month + 1;
+            if (months > MaxMonthsInDateFilter)
+            {
+                return f.Gte(year, first.Year) & f.Lte(year, last.Year);
+            }
+
+            var eachMonth = new List<FilterDefinition<T>>();
+            for (DateOnly m = new DateOnly(first.Year, first.Month, 1); m <= last; m = m.AddMonths(1))
+            {
+                var inMonth = f.Eq(year, m.Year) & f.Eq(month, m.Month);
+                if (m.Year == first.Year && m.Month == first.Month)
+                {
+                    inMonth &= f.Gte(day, first.Day);
+                }
+                if (m.Year == last.Year && m.Month == last.Month)
+                {
+                    inMonth &= f.Lte(day, last.Day);
+                }
+                eachMonth.Add(inMonth);
+            }
+            return f.Or(eachMonth);
         }
     }
 }

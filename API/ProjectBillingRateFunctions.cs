@@ -15,17 +15,21 @@ namespace sma.plan
 	// projects' rates. They see them on those projects' invoices anyway, and
 	// need them for the project's time not yet invoiced.
 	//
-	// For each project + role the rates form one unbroken timeline - no overlaps,
-	// no gaps, only the latest open-ended - so every day from the first rate on
-	// has exactly one price. Each write is checked against the whole timeline as
-	// it would look afterwards, and nothing is written if that check fails.
+	// A rate is a person's on a rate list (RateList), which one or more projects
+	// price their hours from. For each list + person the rates form one unbroken
+	// timeline - no overlaps, no gaps, only the latest open-ended - so every day
+	// from the first rate on has exactly one price. Each write is checked against
+	// the whole timeline as it would look afterwards, and nothing is written if
+	// that check fails. Changing several people's rates at once is
+	// RateListFunctions' Raise.
 	internal class ProjectBillingRateFunctions : RequestHandler
 	{
 		private readonly IProjectBillingRateRepo _rateRepo;
 		private readonly IProjectRepo _projectRepo;
 		private readonly IProjectService _projectService;
 		private readonly ISecurityService _securityService;
-		private readonly DatabaseRepo<ProjectRole> _roleRepo = new DatabaseRepo<ProjectRole>();
+		private readonly DatabaseRepo<RateList> _listRepo = new DatabaseRepo<RateList>();
+		private readonly DatabaseRepo<TeamMember> _memberRepo = new DatabaseRepo<TeamMember>();
 
 		public ProjectBillingRateFunctions(
 			IProjectBillingRateRepo rateRepo,
@@ -39,6 +43,8 @@ namespace sma.plan
 			_securityService = securityService;
 		}
 
+		// What a project's hours are priced by: its rate list's rows, tagged with
+		// the project. None while it has no list.
 		[Allow(Role.SignedIn)]
 		[Function("GetProjectBillingRates")]
 		public async Task<IActionResult> RunGetProjectBillingRates(
@@ -55,28 +61,88 @@ namespace sma.plan
 				return Forbidden();
 			}
 
+			Project project = _projectRepo.Find(projectId);
+			if (project == null)
+			{
+				return Invalid("That project doesn't exist.");
+			}
+
 			return Ok(
-				() => _rateRepo.GetByProject(projectId),
+				() => _rateRepo.GetForProjects(new[] { project }),
 				(r) => new
 				{
 					projectBillingRateList = r
 				});
 		}
 
+		// Several projects' rates at once, for a report across projects:
+		// { projectIds }. Gives which list each project uses (null for none) and
+		// those lists' rows, each list once however many projects share it. The
+		// same rule as for one project: an admin reads any, a manager their own.
+		// A POST, so a long list of ids fits.
+		[Allow(Role.SignedIn)]
+		[Function("GetBillingRatesForProjects")]
+		public async Task<IActionResult> RunGetBillingRatesForProjects(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectBillingRate/forProjects/")] HttpRequest req)
+		{
+			ProjectIdsRequest body = JsonConvert.DeserializeObject<ProjectIdsRequest>(
+				await new StreamReader(req.Body).ReadToEndAsync());
+			List<string> ids = (body?.ProjectIds ?? new List<string>())
+				.Where(id => !string.IsNullOrWhiteSpace(id))
+				.Distinct()
+				.ToList();
+			if (ids.Count == 0)
+			{
+				return Invalid("Choose at least one project.");
+			}
+			if (ids.Count > MaxProjectsAtOnce)
+			{
+				return Invalid($"Ask for at most {MaxProjectsAtOnce} projects at once.");
+			}
+
+			if (!_securityService.IsCurrentUserAdmin())
+			{
+				var managed = _projectService.ManagedProjectIds();
+				if (ids.Any(id => !managed.Contains(id)))
+				{
+					return Forbidden();
+				}
+			}
+
+			return Ok(
+				() =>
+				{
+					List<Project> projects = _projectRepo.GetRateListsOf(ids);
+					List<string> listIds = projects
+						.Where(p => !string.IsNullOrEmpty(p.RateListId))
+						.Select(p => p.RateListId)
+						.Distinct()
+						.ToList();
+					return new
+					{
+						projectRateLists = projects.Select(p => new { projectId = p.Id, rateListId = p.RateListId }).ToList(),
+						projectBillingRateList = listIds.Count > 0 ? _rateRepo.GetByLists(listIds) : new List<ProjectBillingRate>(),
+					};
+				},
+				(r) => r);
+		}
+
+		private const int MaxProjectsAtOnce = 1000;
+
+		private class ProjectIdsRequest
+		{
+			public List<string> ProjectIds { get; set; }
+		}
+
 
 		// The usual way to change a rate: add a row starting on the day the new
-		// rate applies. If the role's latest row is still open-ended and starts
+		// rate applies. If the person's latest row is still open-ended and starts
 		// earlier, it is closed the day before, so the handover leaves no gap.
 		[Allow(Role.Admin)]
 		[Function("CreateProjectBillingRate")]
 		public async Task<IActionResult> RunCreateProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectBillingRate/")] HttpRequest req)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			ProjectBillingRate rate = JsonConvert.DeserializeObject<ProjectBillingRate>(
 				await new StreamReader(req.Body).ReadToEndAsync());
 
@@ -87,7 +153,8 @@ namespace sma.plan
 			}
 
 			rate.Id = null;
-			List<ProjectBillingRate> timeline = TimelineFor(rate.ProjectId, rate.ProjectRoleId);
+			rate.ProjectId = null;
+			List<ProjectBillingRate> timeline = _rateRepo.GetByList(rate.RateListId, new[] { rate.TeamMemberId });
 
 			ProjectBillingRate latest = timeline.OrderBy(r => r.StartDate).LastOrDefault();
 			ProjectBillingRate closed = null;
@@ -121,7 +188,7 @@ namespace sma.plan
 		}
 
 
-		// Project and role can't be changed - that would move the row onto a
+		// The list and person can't be changed - that would move the row onto a
 		// different timeline. Changing the rate alone always passes; changing
 		// dates must keep the timeline unbroken.
 		[Allow(Role.Admin)]
@@ -129,22 +196,22 @@ namespace sma.plan
 		public async Task<IActionResult> RunUpdateProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "projectBillingRate/{id}/update/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
-			ProjectBillingRate existing = _rateRepo.Get(id);
+			ProjectBillingRate existing = _rateRepo.Find(id);
 			if (existing == null)
 			{
 				return Invalid("That billing rate no longer exists.");
 			}
 
-			ProjectBillingRate rate = JsonConvert.DeserializeObject<ProjectBillingRate>(
+			ProjectBillingRate rate =JsonConvert.DeserializeObject<ProjectBillingRate>(
 				await new StreamReader(req.Body).ReadToEndAsync());
+			if (rate == null)
+			{
+				return Invalid("No billing rate was sent.");
+			}
 			rate.Id = id;
-			rate.ProjectId = existing.ProjectId;
-			rate.ProjectRoleId = existing.ProjectRoleId;
+			rate.RateListId = existing.RateListId;
+			rate.TeamMemberId = existing.TeamMemberId;
+			rate.ProjectId = null;
 
 			string invalid = ValidateRow(rate);
 			if (invalid != null)
@@ -152,7 +219,7 @@ namespace sma.plan
 				return Invalid(invalid);
 			}
 
-			IEnumerable<ProjectBillingRate> after = TimelineFor(rate.ProjectId, rate.ProjectRoleId)
+			IEnumerable<ProjectBillingRate> after = _rateRepo.GetByList(rate.RateListId, new[] { rate.TeamMemberId })
 				.Where(r => r.Id != id)
 				.Append(rate);
 
@@ -178,18 +245,13 @@ namespace sma.plan
 		public async Task<IActionResult> RunDeleteProjectBillingRate(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "projectBillingRate/{id}/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
-			ProjectBillingRate existing = _rateRepo.Get(id);
+			ProjectBillingRate existing = _rateRepo.Find(id);
 			if (existing == null)
 			{
 				return Invalid("That billing rate no longer exists.");
 			}
 
-			List<ProjectBillingRate> timeline = TimelineFor(existing.ProjectId, existing.ProjectRoleId)
+			List<ProjectBillingRate> timeline =_rateRepo.GetByList(existing.RateListId, new[] { existing.TeamMemberId })
 				.OrderBy(r => r.StartDate)
 				.ToList();
 
@@ -197,7 +259,7 @@ namespace sma.plan
 			if (!isEnd)
 			{
 				return Invalid(
-					"Only the earliest or latest rate for a role can be deleted - removing one in the middle would leave a gap. Change its rate or dates instead.");
+					"Only someone's earliest or latest rate can be deleted - removing one in the middle would leave a gap. Change its rate or dates instead.");
 			}
 
 			return Ok(
@@ -209,14 +271,6 @@ namespace sma.plan
 		}
 
 
-		private List<ProjectBillingRate> TimelineFor(string projectId, string projectRoleId)
-		{
-			return _rateRepo
-				.GetByProject(projectId)
-				.Where(r => r.ProjectRoleId == projectRoleId)
-				.ToList();
-		}
-
 		// Checks the row on its own. Returns null when it's fine.
 		private string ValidateRow(ProjectBillingRate rate)
 		{
@@ -225,27 +279,33 @@ namespace sma.plan
 				return "No billing rate was sent.";
 			}
 
-			if (string.IsNullOrWhiteSpace(rate.ProjectId) || _projectRepo.Get(rate.ProjectId) == null)
+			if (!_listRepo.Exists(rate.RateListId))
 			{
-				return "That project doesn't exist.";
+				return "That rate list doesn't exist.";
 			}
 
-			if (string.IsNullOrWhiteSpace(rate.ProjectRoleId) || _roleRepo.Get(rate.ProjectRoleId) == null)
+			if (!_memberRepo.Exists(rate.TeamMemberId))
 			{
-				return "Select a role.";
+				return "Select a person.";
 			}
 
-			if (rate.HourlyRate < 0)
+			return CheckRate(rate.HourlyRate, rate.StartDate, rate.EndDate);
+		}
+
+		// A rate and its dates, on their own. Null when they're fine.
+		internal static string CheckRate(decimal hourlyRate, DateOnly startDate, DateOnly? endDate)
+		{
+			if (hourlyRate < 0)
 			{
 				return "The rate can't be negative.";
 			}
 
-			if (rate.StartDate == default)
+			if (startDate == default)
 			{
 				return "A start date is required.";
 			}
 
-			if (rate.EndDate.HasValue && rate.EndDate.Value < rate.StartDate)
+			if (endDate.HasValue && endDate.Value < startDate)
 			{
 				return "The end date can't be before the start date.";
 			}
@@ -253,9 +313,9 @@ namespace sma.plan
 			return null;
 		}
 
-		// Checks one role's rows together: sorted by start, each must begin the day
-		// after the previous ends, and only the last may be open-ended.
-		private static string CheckContiguous(IEnumerable<ProjectBillingRate> rows)
+		// Checks one person's rows together: sorted by start, each must begin the
+		// day after the previous ends, and only the last may be open-ended.
+		internal static string CheckContiguous(IEnumerable<ProjectBillingRate> rows)
 		{
 			List<ProjectBillingRate> sorted = rows.OrderBy(r => r.StartDate).ToList();
 

@@ -1,27 +1,30 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace sma.plan
 {
-	// What a role bills at on one project, over a date range. The same role can
-	// bill differently on two projects, and a rate change is a new row, so an hour
-	// is priced by the row covering the day it was worked.
+	// What one person bills at on one rate list, over a date range. The same
+	// person can bill differently on two lists, and a rate change is a new row,
+	// so an hour is priced by the row covering the day it was worked - from the
+	// list of the project it was worked on.
 	//
-	// Per project + role the rows are contiguous - no overlaps, no gaps - and only
+	// Per list + person the rows are contiguous - no overlaps, no gaps - and only
 	// the latest may be open-ended. ProjectBillingRateFunctions enforces that.
 	internal class ProjectBillingRate : GeneralModel
 	{
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string RateListId { get; set; }
 
 		[BsonRepresentation(BsonType.ObjectId)]
+		public string TeamMemberId { get; set; }
+
+		// Not stored with the list's rows: set when they're read for a project
+		// (see IProjectBillingRateRepo.GetForProjects), so an invoice billing
+		// several projects can tell each one's apart, and kept on its copies.
+		[BsonRepresentation(BsonType.ObjectId)]
+		[BsonIgnoreIfNull]
 		public string ProjectId { get; set; }
-
-		[BsonRepresentation(BsonType.ObjectId)]
-		public string ProjectRoleId { get; set; }
 
 		public decimal HourlyRate { get; set; }
 

@@ -15,16 +15,13 @@ namespace sma.plan
 	{
 		private readonly ICustomerRepo _customerRepo;
 		private readonly IProjectRepo _projectRepo;
-		private readonly ISecurityService _securityService;
 
 		public CustomerFunctions(
 			ICustomerRepo customerRepo,
-			IProjectRepo projectRepo,
-			ISecurityService securityService)
+			IProjectRepo projectRepo)
 		{
 			_customerRepo = customerRepo;
 			_projectRepo = projectRepo;
-			_securityService = securityService;
 		}
 
 		[Allow(Role.Admin)]
@@ -32,15 +29,10 @@ namespace sma.plan
 		public async Task<IActionResult> RunCreateCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "customer/")] HttpRequest req)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			Customer customer = JsonConvert.DeserializeObject<Customer>(
 				await new StreamReader(req.Body).ReadToEndAsync());
 
-			string invalid = Validate(customer);
+			string invalid = Customer.Validate(customer);
 			if (invalid != null)
 			{
 				return Invalid(invalid);
@@ -88,16 +80,11 @@ namespace sma.plan
 		public async Task<IActionResult> RunUpdateCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "customer/{id}/update/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
 			Customer customer = JsonConvert.DeserializeObject<Customer>(
 				await new StreamReader(req.Body).ReadToEndAsync());
 			customer.Id = id;
 
-			string invalid = Validate(customer);
+			string invalid = Customer.Validate(customer);
 			if (invalid != null)
 			{
 				return Invalid(invalid);
@@ -119,12 +106,7 @@ namespace sma.plan
 		public async Task<IActionResult> RunDeleteCustomer(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "customer/{id}/")] HttpRequest req, string id)
 		{
-			if (!_securityService.IsCurrentUserAdmin())
-			{
-				return Forbidden();
-			}
-
-			int inUse = _projectRepo.GetAll().Count(p => p.CustomerId == id);
+			long inUse = _projectRepo.CountByCustomer(id);
 			if (inUse > 0)
 			{
 				return Invalid(string.Format(
@@ -137,28 +119,6 @@ namespace sma.plan
 				{
 					deletedCustomer = c
 				});
-		}
-
-
-		private static string Validate(Customer customer)
-		{
-			if (customer == null || string.IsNullOrWhiteSpace(customer.Name))
-			{
-				return "A customer name is required.";
-			}
-
-			customer.Name = customer.Name.Trim();
-			customer.Code = customer.Code?.Trim();
-			customer.Currency = string.IsNullOrWhiteSpace(customer.Currency)
-				? "CAD"
-				: customer.Currency.Trim().ToUpperInvariant();
-
-			if (customer.Currency.Length != 3 || !customer.Currency.All(char.IsLetter))
-			{
-				return "Currency must be a 3-letter code such as CAD or USD.";
-			}
-
-			return null;
 		}
 	}
 }

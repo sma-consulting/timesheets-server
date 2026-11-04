@@ -16,6 +16,10 @@ namespace sma.plan
 	// function's [Allow] role is met. A function without [Allow] is refused:
 	// endpoints are closed unless they say who may use them.
 	//
+	// Website (HTTP) calls only. Claude's MCP tool calls aren't HTTP requests,
+	// so they pass straight through and each tool in McpTools checks sign-in or
+	// admin for itself; their [Allow(Role.Anyone)] is just a label.
+	//
 	// Refusals use the API's usual envelope - HTTP 200 with the real code in
 	// status.code - which is what the frontend expects from every endpoint.
 	internal class SecurityMiddleware : IFunctionsWorkerMiddleware
@@ -29,7 +33,7 @@ namespace sma.plan
 			HttpContext http = context.GetHttpContext();
 			if (http == null)
 			{
-				// Not an HTTP call; every function here is HTTP, but don't guess.
+				// Not an HTTP call: an MCP tool, which checks access itself.
 				await next(context);
 				return;
 			}
@@ -41,20 +45,20 @@ namespace sma.plan
 			{
 				context.GetLogger<SecurityMiddleware>().LogWarning(
 					"Refused {Function}: it has no [Allow] role.", context.FunctionDefinition.Name);
-				await Refuse(http, 403, "This action is not available.");
+				await Refuse(http, 403, Errors.Auth.NotAvailable);
 				return;
 			}
 
 			if (required != Role.Anyone &&
 				string.IsNullOrWhiteSpace(security.GetCurrentTeamMemberId()))
 			{
-				await Refuse(http, 401, "Not signed in.");
+				await Refuse(http, 401, Errors.Auth.NotSignedIn);
 				return;
 			}
 
 			if (required == Role.Admin && !security.IsCurrentUserAdmin())
 			{
-				await Refuse(http, 403, "Administrator access is required.");
+				await Refuse(http, 403, Errors.Auth.AdminRequired);
 				return;
 			}
 
@@ -86,14 +90,11 @@ namespace sma.plan
 			return method?.GetCustomAttribute<AllowAttribute>()?.Role;
 		}
 
-		private static Task Refuse(HttpContext http, int code, string message)
+		// The same reply as an endpoint's own refusals (RequestHandler.Envelope).
+		private static Task Refuse(HttpContext http, int code, ApiError error)
 		{
 			http.Response.StatusCode = StatusCodes.Status200OK;
-			return http.Response.WriteAsJsonAsync(new
-			{
-				status = new { code, error = message },
-				result = new { },
-			});
+			return http.Response.WriteAsJsonAsync(RequestHandler.Envelope(code, error));
 		}
 	}
 }

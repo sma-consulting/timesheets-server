@@ -19,5 +19,30 @@ namespace sma.plan
 		// ISO 4217. Time entries copy it when written, so an invoiced entry keeps
 		// the currency it was billed in even if the customer's changes later.
 		public string Currency { get; set; } = "CAD";
+
+		// The rules for saving a customer, shared by the website's endpoints and
+		// Claude's create_client tool. Returns null when the customer is valid,
+		// otherwise the reason it isn't. Also tidies what it checks: trims text
+		// and defaults the currency to CAD.
+		public static string Validate(Customer customer)
+		{
+			if (customer == null || string.IsNullOrWhiteSpace(customer.Name))
+			{
+				return "A customer name is required.";
+			}
+
+			customer.Name = customer.Name.Trim();
+			customer.Code = customer.Code?.Trim();
+			customer.Currency = string.IsNullOrWhiteSpace(customer.Currency)
+				? "CAD"
+				: customer.Currency.Trim().ToUpperInvariant();
+
+			if (customer.Currency.Length != 3 || !customer.Currency.All(char.IsLetter))
+			{
+				return "Currency must be a 3-letter code such as CAD or USD.";
+			}
+
+			return null;
+		}
 	}
 }

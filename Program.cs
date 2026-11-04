@@ -42,6 +42,8 @@ var host = new HostBuilder()
 		services.AddSingleton<IInvoiceRepo, InvoiceRepo>();
 		services.AddSingleton<IProjectFinancialsRepo, ProjectFinancialsRepo>();
 		services.AddSingleton<IReimbursementBatchRepo, ReimbursementBatchRepo>();
+		services.AddSingleton<IHolidayRepo, HolidayRepo>();
+		services.AddSingleton<IProjectRoleRepo, ProjectRoleRepo>();
 
 		// Receipt files. Locally a connection string (Azurite) or the storage
 		// URL with your own Azure login; in Azure the account URL plus the
@@ -73,7 +75,9 @@ var host = new HostBuilder()
 		});
 
 		// service definitions
-		services.AddTransient<ISecurityService, SecurityService>();
+		// Scoped, not transient: one per request, shared by the middleware and
+		// every service, so the caller is looked up once rather than per check.
+		services.AddScoped<ISecurityService, SecurityService>();
 		services.AddScoped<IUserService, UserService>();
 		services.AddScoped<IConfigurationService, ConfigurationService>();
 		services.AddScoped<ITeamMemberService, TeamMemberService>();
@@ -96,22 +100,48 @@ if (missing.Count > 0)
 			string.Join(", ", missing));
 }
 
-// Marks time billed on invoices issued before time entries said whether they
-// were invoiced. In the background, so startup isn't held up; it does nothing
-// once everything is marked.
+// Indexes for the fields queries filter by (see DatabaseIndexes). In the
+// background, so startup isn't held up; until they exist the queries still
+// work, just slower.
+_ = Task.Run(() =>
+{
+	ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseIndexes");
+	DatabaseIndexes.Ensure((index, ex) =>
+		logger.LogWarning(ex, "Couldn't create the index on {Index}.", index));
+});
+
+// The paid hours off project and its tasks (see PaidTimeOffSeed). In the
+// background, so startup isn't held up; it adds only what's missing.
 _ = Task.Run(() =>
 {
 	try
 	{
-		InvoicedTimeSync.Run(
-			host.Services.GetRequiredService<IInvoiceRepo>(),
-			host.Services.GetRequiredService<ITimeEntryRepo>());
+		PaidTimeOffSeed.Run(
+			host.Services.GetRequiredService<IProjectRepo>(),
+			host.Services.GetRequiredService<IProjectTaskRepo>(),
+			host.Services.GetRequiredService<IProjectSubTaskRepo>());
 	}
 	catch (Exception ex)
 	{
 		host.Services.GetRequiredService<ILoggerFactory>()
-			.CreateLogger("InvoicedTimeSync")
-			.LogWarning(ex, "Couldn't mark the time billed on earlier invoices as invoiced.");
+			.CreateLogger("PaidTimeOffSeed")
+			.LogWarning(ex, "Couldn't set up the paid hours off project.");
+	}
+});
+
+// The holidays a new database starts with (see HolidaySeed). In the background,
+// so startup isn't held up; it does nothing once there are holidays.
+_ = Task.Run(() =>
+{
+	try
+	{
+		HolidaySeed.Run(host.Services.GetRequiredService<IHolidayRepo>());
+	}
+	catch (Exception ex)
+	{
+		host.Services.GetRequiredService<ILoggerFactory>()
+			.CreateLogger("HolidaySeed")
+			.LogWarning(ex, "Couldn't add the starting holidays.");
 	}
 });
 

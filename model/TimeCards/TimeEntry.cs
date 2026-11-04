@@ -49,6 +49,15 @@ namespace sma.plan
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string InvoiceId { get; set; }
 
+		// Locked by an admin by hand - time billed outside the app, or a month
+		// checked and closed - when, and by whom (their user id). Locked time
+		// can't be changed until it's unlocked. Kept by the server only, like
+		// Invoiced: an update carries it over, whatever the client sends.
+		public DateTime? LockedAt { get; set; }
+
+		[BsonRepresentation(BsonType.ObjectId)]
+		public string LockedBy { get; set; }
+
 		// Earlier versions of this entry, oldest first. Kept by the server only:
 		// TimeEntryService carries it across updates, so a client can't write or
 		// erase it. Snapshots have none of their own, hence IgnoreIfNull.

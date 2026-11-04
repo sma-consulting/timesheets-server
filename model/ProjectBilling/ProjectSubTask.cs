@@ -27,5 +27,23 @@ namespace sma.plan
 		// Sub-tasks saved with one still load - GeneralModel ignores extra elements.
 
 		public bool Billable { get; set; } = true;
+
+		// On the paid hours off project, which kind of time this task is - one of
+		// TimeOffTypes - so the Staff hours checks can tell a stat holiday from
+		// vacation whatever the task is called. Null for ordinary work. Set only
+		// by PaidTimeOffSeed; ProjectSubTaskService keeps it as stored.
+		public string TimeOffType { get; set; }
+	}
+
+	internal static class TimeOffTypes
+	{
+		public const string LunchBreak = "lunchBreak";
+		public const string StatHoliday = "statHoliday";
+		public const string Vacation = "vacation";
+		public const string PersonalLeave = "personalLeave";
+		public const string SickLeave = "sickLeave";
+		// Leave without pay: on the paid hours off project all the same, so the
+		// day is accounted for, but kept apart from paid leave.
+		public const string UnpaidLeave = "unpaidLeave";
 	}
 }

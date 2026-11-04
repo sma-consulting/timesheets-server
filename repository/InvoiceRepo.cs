@@ -1,6 +1,7 @@
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace sma.plan
@@ -75,29 +76,149 @@ namespace sma.plan
 				.Max();
 		}
 
-		// Like Get, but null rather than an exception when there's no such invoice
-		// (or the id isn't one at all).
-		public Invoice Find(string id)
+		public List<Invoice> GetSummaries(IEnumerable<string>? projectIds, bool issuedOnly,
+			DateOnly? from = null, DateOnly? to = null, bool includeOpen = false, string approverId = null)
+		{
+			var f = Builders<Invoice>.Filter;
+			var filter = f.Empty;
+			if (projectIds != null)
+			{
+				// Any of its projects; an older invoice has ProjectId alone.
+				List<string> ids = ValidIds(projectIds);
+				filter &= f.In(i => i.ProjectId, ids) | f.AnyIn(i => i.ProjectIds, ids);
+			}
+			if (issuedOnly)
+			{
+				var issued = f.Eq(i => i.Issued, true);
+				filter &= approverId != null && ObjectId.TryParse(approverId, out _)
+					? issued | f.ElemMatch(i => i.Approvals, a => a.ProjectManagerId == approverId)
+					: issued;
+			}
+
+			// Still open: neither paid nor cancelled. Ne ("not true"), so an
+			// invoice saved before those flags existed still counts as open.
+			var open = f.Ne(i => i.Paid, true) & f.Ne(i => i.Cancelled, true);
+			bool ranged = from != null || to != null;
+			if (ranged)
+			{
+				var inRange = DateBetween(nameof(Invoice.Month), from, to);
+				filter &= includeOpen ? f.Or(inRange, open) : inRange;
+			}
+
+			// Left out with a plain { field: 0 } projection, which Cosmos handles
+			// as MongoDB does. They read back as empty lists.
+			var withoutCopies = Builders<Invoice>.Projection
+				.Exclude(i => i.TimeEntries)
+				.Exclude(i => i.BilledAssignments)
+				.Exclude(i => i.BilledRates)
+				.Exclude(i => i.BilledTasks)
+				.Exclude(i => i.BilledSubTasks)
+				.Exclude(i => i.BilledExpenses);
+
+			List<Invoice> found = DBCollection.Find(filter).SortBy(i => i.Id).Project<Invoice>(withoutCopies).ToList();
+			if (!ranged)
+			{
+				return found;
+			}
+
+			// The exact range: the query narrows by month (see DateBetween).
+			return found
+				.Where(i => (from == null || i.Month >= from.Value) && (to == null || i.Month <= to.Value)
+					|| (includeOpen && !i.Paid && !i.Cancelled))
+				.ToList();
+		}
+
+		// Ne ("not true") rather than Eq false, so an invoice saved before
+		// Cancelled existed still counts as not cancelled. An older invoice, with
+		// no subprojects listed, bills all of its ProjectId.
+		//
+		// An invoice ends in its Month, so one billing any day from `from` on
+		// has a Month from `from` on: the query narrows by that, and the exact
+		// overlap is checked here.
+		public List<Invoice> ActiveCovering(DateOnly from, DateOnly to, IEnumerable<string> projectIds,
+			IEnumerable<string> projectTaskIds, string exceptId)
+		{
+			var f = Builders<Invoice>.Filter;
+			var older = (f.Exists(i => i.ProjectTaskIds, false) | f.Size(i => i.ProjectTaskIds, 0))
+				& f.In(i => i.ProjectId, ValidIds(projectIds));
+			var filter = DateBetween(nameof(Invoice.Month), from, null)
+				& f.Ne(i => i.Cancelled, true)
+				& (f.AnyIn(i => i.ProjectTaskIds, projectTaskIds ?? Enumerable.Empty<string>()) | older);
+			if (ObjectId.TryParse(exceptId, out _))
+			{
+				filter &= f.Ne(i => i.Id, exceptId);
+			}
+
+			var coverage = Builders<Invoice>.Projection
+				.Include(i => i.Number)
+				.Include(i => i.Month)
+				.Include(i => i.PeriodStart)
+				.Include(i => i.PeriodEnd)
+				.Include(i => i.ProjectId)
+				.Include(i => i.ProjectTaskIds);
+			return DBCollection.Find(filter).Project<Invoice>(coverage).ToList()
+				.Where(i => i.From() <= to && i.To() >= from)
+				.ToList();
+		}
+
+		public Invoice FindNumber(string id)
 		{
 			if (!ObjectId.TryParse(id, out _))
 			{
 				return null;
 			}
-			return DBCollection.Find(i => i.Id == id).FirstOrDefault();
+			var numberOnly = Builders<Invoice>.Projection
+				.Include(i => i.Number)
+				.Include(i => i.Month);
+			return DBCollection.Find(i => i.Id == id).Project<Invoice>(numberOnly).FirstOrDefault();
 		}
 
-		// The issued, not cancelled invoice that billed a time entry, if any.
-		public Invoice IssuedInvoiceBilling(string timeEntryId)
+		public Invoice FindWorkCompleted(string id)
 		{
-			if (!ObjectId.TryParse(timeEntryId, out _))
+			if (!ObjectId.TryParse(id, out _))
 			{
 				return null;
 			}
+			var notesOnly = Builders<Invoice>.Projection
+				.Include(i => i.ProjectId)
+				.Include(i => i.ProjectIds)
+				.Include(i => i.Cancelled)
+				.Include(i => i.WorkCompleted);
+			return DBCollection.Find(i => i.Id == id).Project<Invoice>(notesOnly).FirstOrDefault();
+		}
 
-			var filter = Builders<Invoice>.Filter.Eq(i => i.Issued, true)
-				& Builders<Invoice>.Filter.Eq(i => i.Cancelled, false)
-				& Builders<Invoice>.Filter.ElemMatch(i => i.TimeEntries, e => e.TimeEntryId == timeEntryId);
-			return DBCollection.Find(filter).FirstOrDefault();
+		// One update in the database: nothing else on the invoice is read or
+		// written.
+		public void SetApprovals(string id, List<InvoiceApproval> approvals)
+		{
+			DBCollection.UpdateOne(
+				Builders<Invoice>.Filter.Eq(i => i.Id, id),
+				Builders<Invoice>.Update.Set(i => i.Approvals, approvals));
+		}
+
+		// Counted in the database. Ne ("not true"), so an invoice saved before
+		// those flags existed still counts.
+		public long CountAwaitingApproval(string approverId)
+		{
+			if (!ObjectId.TryParse(approverId, out _))
+			{
+				return 0;
+			}
+			var f = Builders<Invoice>.Filter;
+			return DBCollection.CountDocuments(
+				f.Ne(i => i.Issued, true)
+				& f.Ne(i => i.Cancelled, true)
+				& f.ElemMatch(i => i.Approvals,
+					a => a.ProjectManagerId == approverId && a.Status == InvoiceApproval.StatusRequested));
+		}
+
+		// One update in the database: nothing else on the invoice is read or
+		// written.
+		public void SetWorkCompleted(string id, List<InvoiceWorkNote> notes)
+		{
+			DBCollection.UpdateOne(
+				Builders<Invoice>.Filter.Eq(i => i.Id, id),
+				Builders<Invoice>.Update.Set(i => i.WorkCompleted, notes));
 		}
 
 		// The issued, not cancelled invoice that bills an expense, if any.

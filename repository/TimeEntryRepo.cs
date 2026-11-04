@@ -46,9 +46,147 @@ namespace sma.plan
 			DBCollection.UpdateMany(filter, update);
 		}
 
-		public long CountInvoiced()
+		// One update in the database: nothing is read first. Exact only for ranges
+		// DateBetween filters day by day (24 months or less) - the endpoint keeps
+		// to that.
+		public long SetLocked(string teamMemberId, string projectId, DateOnly from, DateOnly to,
+			DateTime? lockedAt, string lockedBy)
 		{
-			return DBCollection.CountDocuments(Builders<TimeEntry>.Filter.Eq(e => e.Invoiced, true));
+			var f = Builders<TimeEntry>.Filter;
+			// Locking skips what's already locked, unlocking what isn't. Entries from
+			// before the lock have no LockedAt at all, which Eq null also matches.
+			var filter = DateBetween(nameof(TimeEntry.Date), from, to)
+				& (lockedAt != null ? f.Eq(e => e.LockedAt, null) : f.Ne(e => e.LockedAt, null));
+
+			foreach ((string id, bool isMember) in new[] { (teamMemberId, true), (projectId, false) })
+			{
+				if (id == null)
+				{
+					continue;
+				}
+				// An id that isn't an ObjectId can't match, and would throw in a filter.
+				if (!ObjectId.TryParse(id, out _))
+				{
+					return 0;
+				}
+				filter &= isMember ? f.Eq(e => e.TeamMemberId, id) : f.Eq(e => e.ProjectId, id);
+			}
+
+			var update = Builders<TimeEntry>.Update
+				.Set(e => e.LockedAt, lockedAt)
+				.Set(e => e.LockedBy, lockedBy);
+			return DBCollection.UpdateMany(filter, update).ModifiedCount;
 		}
+
+		// A save is one call to the database: unlike Create, Update and Delete,
+		// these don't read the entry before or after.
+		public TimeEntry Insert(TimeEntry data)
+		{
+			DBCollection.InsertOne(data);
+			return data;
+		}
+
+		public TimeEntry Replace(TimeEntry data)
+		{
+			DBCollection.ReplaceOne(e => e.Id == data.Id, data);
+			return data;
+		}
+
+		public void Remove(string id)
+		{
+			DBCollection.DeleteOne(e => e.Id == id);
+		}
+
+		public List<TimeEntry> GetFiltered(string teamMemberId, string projectId, DateOnly? from, DateOnly? to,
+			string visibleTo, IEnumerable<string> visibleProjectIds, bool brief = false, bool uninvoicedOnly = false)
+		{
+			var f = Builders<TimeEntry>.Filter;
+			var filter = DateBetween(nameof(TimeEntry.Date), from, to);
+			if (uninvoicedOnly)
+			{
+				// "Not true": an entry saved before the flag existed has no field.
+				filter &= f.Ne(e => e.Invoiced, true);
+			}
+
+			foreach ((string id, bool isMember) in new[] { (teamMemberId, true), (projectId, false) })
+			{
+				if (id == null)
+				{
+					continue;
+				}
+				// An id that isn't an ObjectId can't match, and would throw in a filter.
+				if (!ObjectId.TryParse(id, out _))
+				{
+					return new List<TimeEntry>();
+				}
+				filter &= isMember ? f.Eq(e => e.TeamMemberId, id) : f.Eq(e => e.ProjectId, id);
+			}
+
+			if (visibleTo != null)
+			{
+				filter &= f.Eq(e => e.TeamMemberId, visibleTo) | f.In(e => e.ProjectId, ValidIds(visibleProjectIds));
+			}
+
+			// The pages don't use the history, and it can be most of an entry.
+			var shown = brief ? HoursOnly : Builders<TimeEntry>.Projection.Exclude(e => e.History);
+
+			// The exact range: the query narrows by month (see DateBetween).
+			return DBCollection.Find(filter).SortBy(e => e.Id).Project<TimeEntry>(shown).ToList()
+				.Where(e => (from == null || e.Date >= from.Value) && (to == null || e.Date <= to.Value))
+				.ToList();
+		}
+
+				// Counted by the database: nothing is loaded at all.
+		public long CountLoggedAgainst(IEnumerable<string> projectTaskIds, IEnumerable<string> projectSubTaskIds)
+		{
+			List<string> tasks = (projectTaskIds ?? Enumerable.Empty<string>())
+				.Where(id => ObjectId.TryParse(id, out _))
+				.ToList();
+			List<string> subTasks = (projectSubTaskIds ?? Enumerable.Empty<string>())
+				.Where(id => ObjectId.TryParse(id, out _))
+				.ToList();
+
+			var filter = Builders<TimeEntry>.Filter.In(e => e.ProjectTaskId, tasks)
+				| Builders<TimeEntry>.Filter.In(e => e.ProjectSubTaskId, subTasks);
+
+			return DBCollection.CountDocuments(filter);
+		}
+
+		public List<TimeEntry> GetOnTasks(IEnumerable<string> projectTaskIds, DateOnly from, DateOnly to)
+		{
+			var filter = DateBetween(nameof(TimeEntry.Date), from, to)
+				& Builders<TimeEntry>.Filter.In(e => e.ProjectTaskId, ValidIds(projectTaskIds));
+			var withoutHistory = Builders<TimeEntry>.Projection.Exclude(e => e.History);
+
+			// The exact range: the query narrows by month (see DateBetween).
+			return DBCollection.Find(filter).Project<TimeEntry>(withoutHistory).ToList()
+				.Where(e => e.Date >= from && e.Date <= to)
+				.ToList();
+		}
+
+		// What adding up hours needs: who, the project and sub-task, the day, the
+		// hours, and whether they're billed or locked.
+		private static readonly ProjectionDefinition<TimeEntry> HoursOnly = Builders<TimeEntry>.Projection
+			.Include(e => e.TeamMemberId)
+			.Include(e => e.ProjectId)
+			.Include(e => e.ProjectTaskId)
+			.Include(e => e.ProjectSubTaskId)
+			.Include(e => e.Date)
+			.Include(e => e.Hours)
+			.Include(e => e.Invoiced)
+			.Include(e => e.LockedAt);
+
+		public List<TimeEntry> GetHoursBetween(DateOnly from, DateOnly to)
+		{
+			// The exact range: the query narrows by month (see DateBetween).
+			return DBCollection.Find(DateBetween(nameof(TimeEntry.Date), from, to))
+				.Project<TimeEntry>(HoursOnly)
+				.ToList()
+				.Where(e => e.Date >= from && e.Date <= to)
+				.ToList();
+		}
+
+
+
 	}
 }

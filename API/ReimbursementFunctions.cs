@@ -36,17 +36,69 @@ namespace sma.plan
 			_securityService = securityService;
 		}
 
-		// Every filed batch, newest first, voided ones included.
+		// Every filed batch, newest first, voided ones included - as the page's
+		// list shows it, without anyone's expenses, which are most of a batch.
+		// A batch in full, to print it, comes from reimbursement/{id}/.
 		[Allow(Role.Admin)]
 		[Function("GetReimbursementBatches")]
 		public async Task<IActionResult> RunGetReimbursementBatches(
 			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "reimbursement/")] HttpRequest req)
 		{
 			return Ok(
-				() => _batchRepo.GetAll().OrderByDescending(b => b.FiledAt).ToList(),
+				() => _batchRepo.GetWithoutExpenses()
+					.OrderByDescending(b => b.FiledAt)
+					.Select(b => new
+					{
+						id = b.Id,
+						batchDate = b.BatchDate,
+						filedAt = b.FiledAt,
+						total = b.Total,
+						count = b.Count,
+						peopleCount = b.People.Count,
+						voided = b.Voided,
+					})
+					.ToList(),
 				(b) => new
 				{
 					batchList = b
+				});
+		}
+
+
+		// One filed batch in full - each person's expenses - to print it.
+		[Allow(Role.Admin)]
+		[Function("GetReimbursementBatch")]
+		public async Task<IActionResult> RunGetReimbursementBatch(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "reimbursement/{id}/")] HttpRequest req, string id)
+		{
+			ReimbursementBatch batch = _batchRepo.Find(id);
+			if (batch == null)
+			{
+				return Invalid("That batch no longer exists.");
+			}
+
+			return Ok(
+				() => batch,
+				(b) => new
+				{
+					batch = b
+				});
+		}
+
+
+		// The expenses still to be paid back - approved, reimbursable, not yet
+		// reimbursed, whatever their date - for the page's preview of a batch.
+		// The same ones filing checks against.
+		[Allow(Role.Admin)]
+		[Function("GetAwaitingReimbursement")]
+		public async Task<IActionResult> RunGetAwaitingReimbursement(
+			[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "reimbursement/awaiting/")] HttpRequest req)
+		{
+			return Ok(
+				() => _expenseRepo.GetAwaitingReimbursement(),
+				(e) => new
+				{
+					expenseList = e
 				});
 		}
 
@@ -76,8 +128,11 @@ namespace sma.plan
 				return Invalid("That period hasn't started yet.");
 			}
 
-			List<Expense> due = _expenseRepo.GetAll()
-				.Where(e => e.Status == Expense.StatusApproved && e.Reimbursable && !e.Reimbursed && e.Date <= batchDate)
+			// The date is checked here rather than in the query: dates are stored
+			// as {Year, Month, Day} documents, which the database isn't relied on
+			// to compare.
+			List<Expense> due = _expenseRepo.GetAwaitingReimbursement()
+				.Where(e => e.Date <= batchDate)
 				.ToList();
 			if (due.Count == 0)
 			{
@@ -88,7 +143,7 @@ namespace sma.plan
 				return Invalid("The batch has changed since it was shown. Check it again before filing.");
 			}
 
-			Dictionary<string, string> names = _teamMemberRepo.GetAll()
+			Dictionary<string, string> names = _teamMemberRepo.GetByIds(due.Select(e => e.TeamMemberId))
 				.Where(m => !string.IsNullOrWhiteSpace(m.Id))
 				.GroupBy(m => m.Id)
 				.ToDictionary(g => g.Key, g => g.First().Name);
@@ -154,7 +209,7 @@ namespace sma.plan
 			return Ok(
 				() =>
 				{
-					foreach (Expense expense in _expenseRepo.GetAll().Where(e => e.ReimbursementBatchId == id))
+					foreach (Expense expense in _expenseRepo.GetByReimbursementBatch(id))
 					{
 						expense.Reimbursed = false;
 						expense.ReimbursementBatchId = null;

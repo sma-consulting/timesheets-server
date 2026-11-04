@@ -9,43 +9,42 @@ namespace sma.plan
 	internal class ProjectSubTaskService : IProjectSubTaskService
 	{
 		private IProjectSubTaskRepo _repo;
-		private ISecurityService _securityService;
 		private IProjectService _projectService;
 		private IProjectTaskRepo _taskRepo;
 
 		public ProjectSubTaskService(
 			IProjectSubTaskRepo repo,
-			ISecurityService securityService,
 			IProjectService projectService,
 			IProjectTaskRepo taskRepo)
 		{
 			_repo = repo;
-			_securityService = securityService;
 			_projectService = projectService;
 			_taskRepo = taskRepo;
 		}
 
+		// Only PaidTimeOffSeed makes the paid hours off tasks, so a new task is
+		// ordinary work, whatever was sent.
 		public ProjectSubTask Create(ProjectSubTask projectSubTask)
 		{
-			_securityService.AuthorizeUser();
+			projectSubTask.TimeOffType = null;
 			return _repo.Create(projectSubTask);
 		}
 
+		// TimeOffType stays as stored: renaming "Vacation" mustn't stop it
+		// counting as vacation, and no save can turn work into time off.
 		public ProjectSubTask Update(ProjectSubTask projectSubTask)
 		{
-			_securityService.AuthorizeUser();
+			projectSubTask.TimeOffType = _repo.Get(projectSubTask.Id).TimeOffType;
 			return _repo.Update(projectSubTask).Item2;
 		}
 
 		public ProjectSubTask Get(string id)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Get(id);
 		}
 
 		public ProjectSubTask Delete(string id)
 		{
-			_securityService.AuthorizeUser();
 			return _repo.Delete(id);
 		}
 
@@ -58,26 +57,19 @@ namespace sma.plan
 		// the tree is actually built from, so it is the one to trust.
 		public List<ProjectSubTask> GetAllProjectSubTasks()
 		{
-			_securityService.AuthorizeUser();
-
-			List<ProjectSubTask> all = _repo.GetAll();
 			HashSet<string> visible = _projectService.VisibleProjectIds();
 
 			if (visible == null)
 			{
-				return all;
+				return _repo.GetAll();
 			}
 
-			HashSet<string> visibleTaskIds = _taskRepo
-				.GetAll()
-				.Where(t => visible.Contains(t.ProjectId))
+			List<string> visibleTaskIds = _taskRepo
+				.GetByProjects(visible)
 				.Select(t => t.Id)
-				.ToHashSet();
-
-			return all
-				.Where(s => visibleTaskIds.Contains(s.ProjectTaskId)
-					|| visible.Contains(s.ProjectId))
 				.ToList();
+
+			return _repo.GetInProjects(visible, visibleTaskIds);
 		}
 	}
 }

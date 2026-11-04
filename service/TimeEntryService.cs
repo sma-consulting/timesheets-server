@@ -35,45 +35,67 @@ namespace sma.plan
 		}
 
 		// Time billed on an issued invoice is locked - for admins too - so the
-		// invoice always matches the hours behind it. Returns why, or null when
-		// the entry may change. Cancelling the invoice unlocks it.
+		// invoice always matches the hours behind it; so is time an admin locked
+		// by hand (see Lock). Returns why, or null when the entry may change.
+		// Cancelling the invoice, or unlocking, frees it.
+		//
+		// `existing` is the entry as stored, already loaded by the caller: its
+		// Invoiced flag says whether it's billed (issuing and cancelling set it),
+		// so nothing more is read unless the
+		// change is refused - and then only the invoice's number and month.
 		//
 		// `changed` is the entry as an update would save it. A save that changes
 		// nothing a person edits goes through: the Week grid saves a cell every
 		// time it's left, edited or not.
-		public string LockedReason(string timeEntryId, TimeEntry changed = null)
+		public string LockedReason(TimeEntry existing, TimeEntry changed = null)
 		{
-			Invoice invoice = _invoiceRepo.IssuedInvoiceBilling(timeEntryId);
-			if (invoice == null)
+			if (existing == null || (!existing.Invoiced && existing.LockedAt == null))
 			{
 				return null;
 			}
 
-			if (changed != null)
+			if (changed != null
+				&& existing.ProjectSubTaskId == changed.ProjectSubTaskId
+				&& existing.TeamMemberId == OwnerFor(changed)
+				&& existing.Date == changed.Date
+				&& existing.Hours == changed.Hours
+				&& (existing.Notes ?? "") == (changed.Notes ?? ""))
 			{
-				TimeEntry existing = _repo.Get(timeEntryId);
-				if (existing != null
-					&& existing.ProjectSubTaskId == changed.ProjectSubTaskId
-					&& existing.TeamMemberId == OwnerFor(changed)
-					&& existing.Date == changed.Date
-					&& existing.Hours == changed.Hours
-					&& (existing.Notes ?? "") == (changed.Notes ?? ""))
-				{
-					return null;
-				}
+				return null;
 			}
 
+			if (existing.Invoiced)
+			{
+				Invoice invoice = _invoiceRepo.FindNumber(existing.InvoiceId);
+				if (invoice == null)
+				{
+					return "This time was billed on an issued invoice, so it can't be changed. To change it, cancel the invoice first.";
+				}
+				return string.Format(
+					"This time was billed on invoice {0} ({1}), so it can't be changed. To change it, cancel the invoice first.",
+					invoice.Number,
+					invoice.Month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture));
+			}
 			return string.Format(
-				"This time was billed on invoice {0} ({1}), so it can't be changed. To change it, cancel the invoice first.",
-				invoice.Number,
-				invoice.Month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture));
+				"This time was locked by an admin on {0}, so it can't be changed. An admin can unlock it on Staff hours.",
+				existing.LockedAt.Value.ToString("MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture));
+		}
+
+		// Locks - or, with `locked` false, unlocks - the time between two days,
+		// for one person or everyone, on one project or all. Admins only (the
+		// endpoint checks). Returns how many entries were changed.
+		public long Lock(string teamMemberId, string projectId, DateOnly from, DateOnly to, bool locked)
+		{
+			return _repo.SetLocked(teamMemberId, projectId, from, to,
+				locked ? DateTime.UtcNow : null, locked ? _securityService.GetCurrentUserId() : null);
 		}
 
 		// Assignment is project-level: being put on a project lets you book time
 		// against any of its sub-tasks, and you pick which one yourself. So this
-		// resolves the sub-task up to its project and checks the assignment there.
+		// checks the assignment on the entry's project - which Validate has just
+		// filled in from the sub-task, so the sub-task isn't read again here.
 		// Admins are exempt so they can correct anyone's timesheet.
-		public bool MayLogAgainst(string teamMemberId, string projectSubTaskId)
+		public bool MayLogAgainst(string teamMemberId, string projectId)
 		{
 			if (_securityService.IsCurrentUserAdmin())
 			{
@@ -81,36 +103,18 @@ namespace sma.plan
 			}
 
 			if (string.IsNullOrWhiteSpace(teamMemberId) ||
-				string.IsNullOrWhiteSpace(projectSubTaskId))
+				string.IsNullOrWhiteSpace(projectId))
 			{
 				return false;
 			}
 
-			ProjectSubTask subTask = _subTaskRepo.Get(projectSubTaskId);
-
-			if (subTask == null)
+			// Vacation, leave and stat holidays: anyone, without being assigned.
+			if (_projectService.PaidTimeOffProjectIds().Contains(projectId))
 			{
-				return false;
+				return true;
 			}
 
-			// ProjectId is denormalised onto the sub-task and is missing on older
-			// records, so fall back to the parent task, which always has it.
-			string projectId = subTask.ProjectId;
-
-			if (string.IsNullOrWhiteSpace(projectId) &&
-				!string.IsNullOrWhiteSpace(subTask.ProjectTaskId))
-			{
-				projectId = _taskRepo.Get(subTask.ProjectTaskId)?.ProjectId;
-			}
-
-			if (string.IsNullOrWhiteSpace(projectId))
-			{
-				return false;
-			}
-
-			return _assignmentRepo
-				.GetByTeamMember(teamMemberId)
-				.Any(a => a.ProjectId == projectId);
+			return _assignmentRepo.IsAssigned(teamMemberId, projectId);
 		}
 
 		// Returns null when the entry is valid, otherwise the reason it isn't.
@@ -149,7 +153,7 @@ namespace sma.plan
 				return "Select a project, subproject and task.";
 			}
 
-			ProjectSubTask subTask = _subTaskRepo.Get(timeEntry.ProjectSubTaskId);
+			ProjectSubTask subTask = _subTaskRepo.Find(timeEntry.ProjectSubTaskId);
 
 			if (subTask == null)
 			{
@@ -158,7 +162,7 @@ namespace sma.plan
 
 			ProjectTask task = string.IsNullOrWhiteSpace(subTask.ProjectTaskId)
 				? null
-				: _taskRepo.Get(subTask.ProjectTaskId);
+				: _taskRepo.Find(subTask.ProjectTaskId);
 
 			if (task == null)
 			{
@@ -205,31 +209,33 @@ namespace sma.plan
 		// the first snapshot an update takes records who created it and when.
 		public TimeEntry Create(TimeEntry timeEntry)
 		{
-			_securityService.AuthorizeUser();
 			timeEntry.TeamMemberId = OwnerFor(timeEntry);
 			timeEntry.History = new List<TimeEntry>();
 			timeEntry.LastModified = DateTime.UtcNow;
 			timeEntry.ModifiedBy = _securityService.GetCurrentTeamMemberId();
-			// Only issuing an invoice marks time invoiced.
+			// Only issuing an invoice marks time invoiced, and only Lock locks it.
 			timeEntry.Invoiced = false;
 			timeEntry.InvoiceId = null;
-			return _repo.Create(timeEntry);
+			timeEntry.LockedAt = null;
+			timeEntry.LockedBy = null;
+			return _repo.Insert(timeEntry);
 		}
 
 		// The update replaces the whole stored entry, and the client never sends
 		// the audit fields - so they're carried over from what's stored rather
 		// than taken from the request, then the old version goes onto History.
-		public TimeEntry Update(TimeEntry timeEntry)
+		// `existing` is the stored entry, already loaded by the caller.
+		public TimeEntry Update(TimeEntry timeEntry, TimeEntry existing)
 		{
-			_securityService.AuthorizeUser();
+			timeEntry.Id = existing.Id;
 			timeEntry.TeamMemberId = OwnerFor(timeEntry);
-
-			TimeEntry existing = _repo.Get(timeEntry.Id);
 			timeEntry.History = existing.History ?? new List<TimeEntry>();
 			timeEntry.LastModified = existing.LastModified;
 			timeEntry.ModifiedBy = existing.ModifiedBy;
 			timeEntry.Invoiced = existing.Invoiced;
 			timeEntry.InvoiceId = existing.InvoiceId;
+			timeEntry.LockedAt = existing.LockedAt;
+			timeEntry.LockedBy = existing.LockedBy;
 
 			if (!timeEntry.SameAs(existing))
 			{
@@ -238,61 +244,49 @@ namespace sma.plan
 				timeEntry.ModifiedBy = _securityService.GetCurrentTeamMemberId();
 			}
 
-			return _repo.Update(timeEntry).Item2;
+			return _repo.Replace(timeEntry);
 		}
 
 		// Guards updates and deletes of an entry that already exists: only its owner
 		// or an admin. Without this an id is enough to overwrite or delete a
 		// colleague's entry - and on an update OwnerFor would quietly reassign it to
 		// whoever called. Project Managers do not pass this; see MayRead.
-		public bool MayWrite(string timeEntryId)
+		// `existing` is the stored entry, already loaded by the caller.
+		public bool MayWrite(TimeEntry existing)
 		{
 			if (_securityService.IsCurrentUserAdmin())
 			{
 				return true;
 			}
 
-			if (string.IsNullOrWhiteSpace(timeEntryId))
-			{
-				return false;
-			}
-
-			TimeEntry existing = _repo.Get(timeEntryId);
-
-			// A missing entry is not an access failure; let the repo report it.
-			if (existing == null)
-			{
-				return true;
-			}
-
 			string callerTeamMemberId = _securityService.GetCurrentTeamMemberId();
 
-			return !string.IsNullOrWhiteSpace(callerTeamMemberId)
+			return existing != null
+				&& !string.IsNullOrWhiteSpace(callerTeamMemberId)
 				&& existing.TeamMemberId == callerTeamMemberId;
 		}
 
-		public TimeEntry Get(string id)
+		// The entry, or null when there's none: read once per request, then
+		// handed to MayRead, MayWrite, LockedReason, Update and Delete.
+		public TimeEntry Find(string id)
 		{
-			_securityService.AuthorizeUser();
-			return _repo.Get(id);
+			return _repo.Find(id);
 		}
 
-		public TimeEntry Delete(string id)
+		public TimeEntry Delete(TimeEntry existing)
 		{
-			_securityService.AuthorizeUser();
-			return _repo.Delete(id);
+			_repo.Remove(existing.Id);
+			return existing;
 		}
 
 		// Reading is wider than writing: a Project Manager may read - never
 		// change - anyone's time on a project they manage.
-		public bool MayRead(string timeEntryId)
+		public bool MayRead(TimeEntry existing)
 		{
-			if (MayWrite(timeEntryId))
+			if (MayWrite(existing))
 			{
 				return true;
 			}
-
-			TimeEntry existing = _repo.Get(timeEntryId);
 
 			return existing != null
 				&& !string.IsNullOrWhiteSpace(existing.ProjectId)
@@ -302,16 +296,14 @@ namespace sma.plan
 		// Admins see every timesheet so they can review and correct them. Everyone
 		// else sees their own, plus - for Project Managers - their projects'
 		// entries. An unresolved caller sees nothing rather than everything -
-		// failing closed matters more here than a helpful fallback.
-		public List<TimeEntry> GetAllTimeEntries()
+		// failing closed matters more here than a helpful fallback. Asked of the
+		// database with the page's filters, so only what it shows is read.
+		public List<TimeEntry> GetTimeEntries(string teamMemberId, string projectId, DateOnly? from, DateOnly? to,
+			bool brief = false, bool uninvoicedOnly = false)
 		{
-			_securityService.AuthorizeUser();
-
-			List<TimeEntry> all = _repo.GetAll();
-
 			if (_securityService.IsCurrentUserAdmin())
 			{
-				return all;
+				return _repo.GetFiltered(teamMemberId, projectId, from, to, null, null, brief, uninvoicedOnly);
 			}
 
 			string callerTeamMemberId = _securityService.GetCurrentTeamMemberId();
@@ -323,12 +315,8 @@ namespace sma.plan
 
 			// Project Managers also get everyone's entries on the projects they
 			// manage, so they can review them. MayWrite keeps those read-only.
-			HashSet<string> managed = _projectService.ManagedProjectIds();
-
-			return all
-				.Where(t => t.TeamMemberId == callerTeamMemberId ||
-					(!string.IsNullOrWhiteSpace(t.ProjectId) && managed.Contains(t.ProjectId)))
-				.ToList();
+			return _repo.GetFiltered(teamMemberId, projectId, from, to,
+				callerTeamMemberId, _projectService.ManagedProjectIds(), brief, uninvoicedOnly);
 		}
 	}
 }
